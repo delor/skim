@@ -83,10 +83,21 @@ export async function buildStandaloneHtml(article) {
   }
 
   const title = (document.title || 'Markdown document').trim();
-  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+
+  // Carry the whole look over, not just the dark/light base: the colour scheme
+  // ("vibe") and reading density are separate <html> attributes, and an export
+  // that dropped them came out in the plain dark/light palette instead of the
+  // one on screen.
+  const root = document.documentElement;
+  const theme = root.getAttribute('data-theme') || 'dark';
+  const carried = ['data-scheme', 'data-skim-density', 'data-skim-print-margin']
+    .map((name) => [name, root.getAttribute(name)])
+    .filter(([, value]) => value)
+    .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
+    .join('');
 
   return `<!doctype html>
-<html lang="${escapeHtml(document.documentElement.lang || 'en')}" data-skim-md="1" data-theme="${escapeHtml(theme)}">
+<html lang="${escapeHtml(root.lang || 'en')}" data-skim-md="1" data-theme="${escapeHtml(theme)}"${carried}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -109,7 +120,7 @@ ${clone.outerHTML}
 async function runExport(article, btn) {
   const label = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '⤓ Exporting…';
+  btn.textContent = '⏳ Exporting…';
   try {
     const html = await buildStandaloneHtml(article);
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -134,7 +145,7 @@ export function setupExportHtml(article) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'skim-export-html';
-  btn.textContent = '⧉ Export HTML';
+  btn.textContent = '🌐 Export HTML';
   btn.addEventListener('click', () => runExport(article, btn));
   return btn;
 }

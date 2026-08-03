@@ -14,7 +14,7 @@ function run() {
   for (const a of links) a.classList.add('skim-md-link');
   const banner = document.createElement('div');
   banner.className = 'skim-folder-banner';
-  banner.textContent = `📄 ${links.length} markdown file${links.length === 1 ? '' : 's'} here — click any to read with Skim`;
+  banner.textContent = `📄 ${links.length} markdown file${links.length === 1 ? '' : 's'} here, click any to read with Skim`;
   document.body.prepend(banner);
 }
 

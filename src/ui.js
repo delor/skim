@@ -88,7 +88,10 @@ export function buildToc(article, headings) {
       const target = document.getElementById(h.id);
       if (target) {
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        history.replaceState(null, '', `#${h.id}`);
+        // Push a history entry so Back/Forward retraces TOC jumps too.
+        try {
+          if (location.hash.slice(1) !== h.id) history.pushState(null, '', `#${h.id}`);
+        } catch { /* ignore */ }
       }
     });
     linkById.set(h.id, link);
@@ -166,8 +169,8 @@ export function addCopyCodeButtons(article) {
   article.querySelectorAll('pre.skim-code').forEach((pre) => {
     const code = pre.querySelector('code');
     if (!code) return;
-    const btn = el('button', { className: 'skim-copy-btn', textContent: '⧉ Copy', type: 'button' });
-    btn.addEventListener('click', () => copyText(code.textContent, btn, '✓ Copied'));
+    const btn = el('button', { className: 'skim-copy-btn', textContent: '📋 Copy', type: 'button' });
+    btn.addEventListener('click', () => copyText(code.textContent, btn, '✅ Copied'));
     pre.append(btn);
   });
 }
@@ -206,13 +209,38 @@ function flashToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 1100);
 }
 
-// Dark/Light theme toggle. Persisted via settings.js (chrome.storage.sync).
+// Base brightness (Dark/Light). Persisted via settings.js (chrome.storage.sync).
 export function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
 }
 
+// Color "vibe" schemes layered on top of the base brightness. Each colored
+// scheme has BOTH a dark and a light variant in skim.css, keyed on
+// [data-theme][data-scheme] — so the vibe follows whichever brightness the
+// Dark/Light button is on. `none` is the plain, un-tinted base. `swatch` is the
+// dot shown in the picker.
+export const SCHEMES = [
+  { id: 'none',   label: 'None',   swatch: 'linear-gradient(135deg, #3a3a44 50%, #e0ded4 50%)' },
+  { id: 'grape',  label: 'Grape',  swatch: 'linear-gradient(135deg, #b06be6, #f08fd4)' },
+  { id: 'rose',   label: 'Rosé',   swatch: 'linear-gradient(135deg, #f08fb4, #ffd0a8)' },
+  { id: 'ocean',  label: 'Ocean',  swatch: 'linear-gradient(135deg, #3fb6d6, #6b8be4)' },
+  { id: 'sunset', label: 'Sunset', swatch: 'linear-gradient(135deg, #f0956b, #e06b9a)' },
+  { id: 'forest', label: 'Forest', swatch: 'linear-gradient(135deg, #4fb886, #b8c34a)' },
+  // Greyscale, tuned for black & white printing (see skim.css "Mono").
+  { id: 'mono',   label: 'Mono',   swatch: 'linear-gradient(135deg, #ffffff, #111111)' },
+];
+const SCHEME_IDS = new Set(SCHEMES.map((s) => s.id));
+
+// Reflect the chosen scheme on <html data-scheme>. 'none' (or an unknown value)
+// removes the attribute so only the base dark/light palette applies.
+export function applyScheme(scheme) {
+  const root = document.documentElement;
+  if (SCHEME_IDS.has(scheme) && scheme !== 'none') root.setAttribute('data-scheme', scheme);
+  else root.removeAttribute('data-scheme');
+}
+
 export function buildThemeToggle(settings) {
-  const label = (theme) => (theme === 'light' ? '☾ Dark' : '☀ Light');
+  const label = (theme) => (theme === 'light' ? '🌙 Dark' : '🌞 Light');
   const btn = el('button', { className: 'skim-theme-toggle', type: 'button' });
   const sync = () => {
     const cur = document.documentElement.getAttribute('data-theme');
@@ -234,16 +262,65 @@ export function buildThemeToggle(settings) {
   return btn;
 }
 
+// Color-scheme ("vibe") picker: a button that expands to a grid of palette
+// swatches. Sits just under the Dark/Light toggle in the toolbar and writes the
+// `scheme` setting (independent of the Dark/Light `theme` setting), so the vibe
+// is remembered and follows whichever brightness is active.
+export function buildPaletteControl(settings) {
+  const wrap = el('div', { className: 'skim-palette-control' });
+  const toggle = el('button', { className: 'skim-palette-toggle', type: 'button', textContent: '🎨 Theme' });
+  const options = el('div', { className: 'skim-palette-options' });
+
+  const optById = new Map();
+  for (const s of SCHEMES) {
+    const opt = el('button', { className: 'skim-palette-opt', type: 'button', title: s.label });
+    opt.dataset.value = s.id;
+    const swatch = el('span', { className: 'skim-palette-swatch' });
+    swatch.style.background = s.swatch;
+    opt.append(swatch, el('span', { className: 'skim-palette-name', textContent: s.label }));
+    opt.addEventListener('click', () => {
+      applyScheme(s.id);
+      setSetting('scheme', s.id).catch(() => {});
+      mark();
+      wrap.classList.remove('open');
+    });
+    optById.set(s.id, opt);
+    options.append(opt);
+  }
+
+  const mark = () => {
+    const cur = document.documentElement.getAttribute('data-scheme') || 'none';
+    for (const [id, opt] of optById) opt.classList.toggle('active', id === cur);
+  };
+
+  toggle.addEventListener('click', () => wrap.classList.toggle('open'));
+  wrap.append(toggle, options);
+  mark();
+  // Exposed so callers can resync the active swatch after an external scheme
+  // change (popup or another tab) without rebinding.
+  wrap.skimSync = mark;
+  return wrap;
+}
+
 // Reading density ("Padding"): normal (default) or big (more spacing).
 // Persisted via settings.js and reflected on <html data-skim-density>.
 export function applyDensity(density) {
   document.documentElement.setAttribute('data-skim-density', density);
 }
 
+// PDF export margin: none | narrow | normal | wide. Reflected on
+// <html data-skim-print-margin> and read back by the print CSS, which draws the
+// margin itself (see print.js — the sheet is printed edge to edge so the theme
+// colour reaches the paper edge). Set on every page, not just at export time,
+// so a popup change lands without a re-render.
+export function applyPrintMargin(printMargin) {
+  document.documentElement.setAttribute('data-skim-print-margin', printMargin);
+}
+
 // A "Padding" button that expands to let the reader choose Normal or Big spacing.
 export function buildPaddingControl(settings) {
   const wrap = el('div', { className: 'skim-padding-control' });
-  const toggle = el('button', { className: 'skim-padding-toggle', type: 'button', textContent: '↕ Padding' });
+  const toggle = el('button', { className: 'skim-padding-toggle', type: 'button', textContent: '📏 Padding' });
   const options = el('div', { className: 'skim-padding-options' });
 
   const make = (label, value) => {
@@ -276,6 +353,39 @@ export function buildPaddingControl(settings) {
   // re-registering the option click handlers.
   wrap.skimSync = mark;
   return wrap;
+}
+
+// Zen mode: hide the table of contents and center the reading column.
+// Persisted via settings.js and reflected on <html data-skim-zen>.
+export function applyZen(zen) {
+  document.documentElement.setAttribute('data-skim-zen', zen ? 'on' : 'off');
+}
+
+// A single toggle button that turns Zen mode on/off. Follows the theme toggle's
+// shape (a label that flips) rather than the expanding option lists, since it's
+// a plain on/off. Reads the current state off <html data-skim-zen> so it stays
+// correct after an external change.
+export function buildZenControl(settings) {
+  const btn = el('button', { className: 'skim-zen-toggle', type: 'button' });
+  const isOn = () => document.documentElement.getAttribute('data-skim-zen') === 'on';
+  const sync = () => {
+    const on = isOn();
+    btn.textContent = on ? '🧘 Zen: On' : '🧘 Zen';
+    btn.classList.toggle('active', on);
+    btn.title = on ? 'Exit Zen mode (show contents)' : 'Zen mode: hide contents, center text';
+  };
+  btn.addEventListener('click', () => {
+    const next = !isOn();
+    applyZen(next);
+    sync();
+    setSetting('zen', next).catch(() => {});
+  });
+  applyZen(settings.zen);
+  sync();
+  // Exposed so callers can resync the label after an external change (popup or
+  // another tab) without rebinding the click handler.
+  btn.skimSync = sync;
+  return btn;
 }
 
 // A collapsed half-tab fixed top-right. Clicking it reveals the given buttons;
@@ -313,8 +423,8 @@ export function buildFolderButton() {
 
 // Copy the whole document's markdown source — one click to feed an LLM.
 export function buildCopySourceButton(getSource) {
-  const btn = el('button', { className: 'skim-copy-source', type: 'button', textContent: '⧉ Copy for AI' });
-  btn.addEventListener('click', () => copyText(getSource(), btn, '✓ Copied'));
+  const btn = el('button', { className: 'skim-copy-source', type: 'button', textContent: '🤖 Copy for AI' });
+  btn.addEventListener('click', () => copyText(getSource(), btn, '✅ Copied'));
   return btn;
 }
 
@@ -325,12 +435,12 @@ export function buildViewToggle(article, rawSource) {
   const pre = el('pre', { className: 'skim-raw', dir: 'auto' }, el('code', { textContent: rawSource }));
   pre.style.display = 'none';
 
-  const btn = el('button', { className: 'skim-view-toggle', type: 'button', textContent: '</> View Raw' });
+  const btn = el('button', { className: 'skim-view-toggle', type: 'button', textContent: '📜 View Raw' });
   btn.addEventListener('click', () => {
     showingRaw = !showingRaw;
     article.style.display = showingRaw ? 'none' : '';
     pre.style.display = showingRaw ? '' : 'none';
-    btn.textContent = showingRaw ? '¶ View Rendered' : '</> View Raw';
+    btn.textContent = showingRaw ? '📖 View Rendered' : '📜 View Raw';
   });
   return { button: btn, rawPre: pre };
 }

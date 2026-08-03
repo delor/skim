@@ -1,0 +1,156 @@
+name: Publish to Chrome Web Store
+
+# Uploads a build to the Chrome Web Store and submits it for review.
+#
+# Triggered by pushing a v* tag (the same tag that produces the GitHub Release
+# asset in ci.yml), or by hand from the Actions tab. It is a no-op until the
+# four repository secrets below exist, so tagging stays safe before setup.
+#
+# One-time setup (secrets live in Settings > Secrets and variables > Actions):
+#   CWS_EXTENSION_ID   the id in the store URL, e.g. feeikgjlekgee...
+#   CWS_CLIENT_ID      OAuth client id  (Google Cloud > Credentials, "Desktop app")
+#   CWS_CLIENT_SECRET  OAuth client secret
+#   CWS_REFRESH_TOKEN  refresh token for scope
+#                      https://www.googleapis.com/auth/chromewebstore
+# The Chrome Web Store API must be enabled in that Google Cloud project, and
+# the OAuth client must belong to the same Google account that owns the store
+# listing. See PUBLISHING notes in the private repo for the click-by-click.
+#
+# Talks to the API with plain curl on purpose: no third-party action gets to
+# see the publishing credentials for the extension.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Who receives it once review passes'
+        type: choice
+        default: default
+        options: [default, trustedTesters]
+      publish:
+        description: 'Submit for review after upload (uncheck to only upload a draft)'
+        type: boolean
+        default: true
+
+jobs:
+  chrome-web-store:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check credentials are configured
+        env:
+          ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          missing=""
+          for v in ID CLIENT_ID CLIENT_SECRET REFRESH_TOKEN; do
+            [ -n "${!v}" ] || missing="$missing CWS_$v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Store credentials not set. Missing secrets:$missing"
+            echo "Add them in Settings > Secrets and variables > Actions, then re-run."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run size
+
+      - name: Package extension
+        id: pack
+        run: |
+          VERSION="$(node -p "require('./manifest.json').version")"
+          ZIP="skim-${VERSION}.zip"
+          zip -qr "$ZIP" \
+            manifest.json src dist vendor assets _locales examples LICENSE \
+            -x '*/.DS_Store'
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ls -lh "$ZIP"
+
+      - name: Refuse to publish a version that is already live
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          VERSION: ${{ steps.pack.outputs.version }}
+        run: |
+          # A tag must match manifest.json, or the store rejects the upload
+          # with a confusing "version already exists" hours later.
+          if [ -n "$TAG" ] && [ "${TAG#v}" != "$VERSION" ]; then
+            echo "::error::tag $TAG does not match manifest version $VERSION"
+            exit 1
+          fi
+
+      - name: Upload and publish
+        env:
+          ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          ZIP: ${{ steps.pack.outputs.zip }}
+          TARGET: ${{ inputs.target || 'default' }}
+          DO_PUBLISH: ${{ github.event_name != 'workflow_dispatch' && 'true' || inputs.publish }}
+        run: |
+          set -euo pipefail
+
+          echo "Exchanging the refresh token for an access token"
+          TOKEN=$(curl -sS -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=$CLIENT_ID" \
+            -d "client_secret=$CLIENT_SECRET" \
+            -d "refresh_token=$REFRESH_TOKEN" \
+            -d "grant_type=refresh_token" | jq -r '.access_token // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "::error::could not get an access token (check CWS_CLIENT_* and CWS_REFRESH_TOKEN)"
+            exit 1
+          fi
+
+          echo "Uploading $ZIP to item $ID"
+          UPLOAD=$(curl -sS -X PUT \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -T "$ZIP" \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$ID?uploadType=media")
+          echo "$UPLOAD" | jq .
+          STATE=$(echo "$UPLOAD" | jq -r '.uploadState // "UNKNOWN"')
+          if [ "$STATE" != "SUCCESS" ]; then
+            echo "::error::upload failed ($STATE)"
+            exit 1
+          fi
+
+          if [ "$DO_PUBLISH" != "true" ]; then
+            echo "Uploaded as a draft. Publish skipped by request."
+            exit 0
+          fi
+
+          echo "Submitting for review, audience: $TARGET"
+          PUBLISH=$(curl -sS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/$ID/publish?publishTarget=$TARGET")
+          echo "$PUBLISH" | jq .
+          # status is an array, e.g. ["OK"] or ["ITEM_NOT_UPDATABLE"].
+          if echo "$PUBLISH" | jq -e '.status | index("OK")' >/dev/null; then
+            echo "Submitted. Google review usually takes a few hours to a few days."
+          else
+            echo "::error::publish call did not return OK"
+            exit 1
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Chrome Web Store" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: ${{ steps.pack.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Package: ${{ steps.pack.outputs.zip }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Listing: https://chromewebstore.google.com/detail/${{ secrets.CWS_EXTENSION_ID }}" >> "$GITHUB_STEP_SUMMARY"

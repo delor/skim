@@ -232,8 +232,8 @@ function addCopyButton(wrap, table) {
   const btn = document.createElement('button');
   btn.className = 'skim-copy-btn skim-table-copy';
   btn.type = 'button';
-  btn.textContent = '⧉ Copy';
-  btn.addEventListener('click', () => copyText(serializeTable(table), btn, '✓ Copied'));
+  btn.textContent = '📋 Copy';
+  btn.addEventListener('click', () => copyText(serializeTable(table), btn, '✅ Copied'));
   wrap.appendChild(btn);
 }
 

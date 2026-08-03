@@ -1,19 +1,15 @@
 // The Scholar-style file-access walkthrough tab. Opened by the background
 // worker when the user navigates to a local .md file while "Allow access to
 // file URLs" is off. The hash carries the originating tab (#tab=<id>) so that
-// the moment access is granted we reload that file and close this tab —
+// the moment access is granted we reload that file and close this tab,
 // one better than asking the user to reload it themselves.
+import { isFileAccessAllowed } from '../file-access-check.js';
 
 const params = new URLSearchParams(location.hash.slice(1));
 const sourceTabId = Number(params.get('tab'));
 
 const SETTINGS_URL =
   `chrome://extensions/?id=${chrome.runtime.id}#:~:text=Allow%20access%20to%20file%20URLs`;
-
-async function fileAccessAllowed() {
-  try { return await chrome.extension.isAllowedFileSchemeAccess(); }
-  catch { return false; }
-}
 
 async function closeSelf() {
   try {
@@ -39,7 +35,7 @@ async function onGranted() {
 
 function watchAccess() {
   const tick = async () => {
-    if (await fileAccessAllowed()) { onGranted(); return; }
+    if (await isFileAccessAllowed()) { onGranted(); return; }
     setTimeout(tick, 1000);
   };
   tick();

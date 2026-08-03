@@ -15,6 +15,8 @@ import { setupExportHtml } from './export-html.js';
 import { extractFrontmatter, buildFrontmatterCard } from './frontmatter.js';
 import { renderMermaidBlocks } from './mermaid.js';
 import { setupLightbox } from './lightbox.js';
+import { applyBidi } from './bidi.js';
+import { wrapOrphanInlines } from './normalize.js';
 import {
   collectHeadings,
   buildToc,
@@ -22,12 +24,17 @@ import {
   enableMathCopy,
   buildViewToggle,
   buildThemeToggle,
+  buildPaletteControl,
   buildPaddingControl,
+  buildZenControl,
   buildToolbar,
   buildFolderButton,
   buildCopySourceButton,
   applyTheme,
+  applyScheme,
   applyDensity,
+  applyZen,
+  applyPrintMargin,
 } from './ui.js';
 import { DEFAULTS, getSettings, migrateLocalSettings, onSettingsChanged } from './settings.js';
 
@@ -64,7 +71,8 @@ async function run() {
 
   // Chrome guessed the charset for the plaintext view; if the guess produced
   // replacement characters, re-read the bytes and decode properly.
-  if (detected && detected.source.includes('�')) {
+  // (Not on the clipboard page: there is no file behind it to re-read.)
+  if (detected && detected.source.includes('�') && location.protocol !== 'chrome-extension:') {
     const buf = await fetchSourceBytes();
     if (buf) detected.source = decodeMarkdownBytes(buf);
   }
@@ -101,11 +109,14 @@ function populateArticle(article, source, settings) {
 
   article.innerHTML = renderMarkdown(source);
 
-  // Per-block bidi: let each block pick its own direction from its first strong
-  // character so Hebrew renders RTL and English LTR within the same document.
-  article
-    .querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, ul, ol, blockquote, td, th, dd, dt')
-    .forEach((node) => { node.setAttribute('dir', 'auto'); });
+  // Re-parent the loose text/inline spans a display-math <div> leaves behind, so
+  // every line of prose is a real paragraph (see normalize.js). Runs before
+  // applyBidi so those orphans get a direction like any other block.
+  wrapOrphanInlines(article);
+
+  // Give each prose block a semantic HTML direction, then let the browser's
+  // Unicode Bidirectional Algorithm lay out mixed Hebrew/English inline runs.
+  applyBidi(article);
 
   // Open external links in a new tab; leave in-page anchors alone.
   article.querySelectorAll('a[href]').forEach((a) => {
@@ -161,14 +172,16 @@ function render(detected, settings) {
   let currentSource = rawSource;
 
   applyTheme(settings.theme);
+  applyScheme(settings.scheme);
   applyDensity(settings.density);
+  applyZen(settings.zen);
+  applyPrintMargin(settings.printMargin);
 
   injectExtensionStylesheet('vendor/fonts.css');
   injectExtensionStylesheet('vendor/katex.min.css');
 
   const article = document.createElement('article');
   article.className = 'skim markdown-body';
-  article.dir = 'auto';
 
   // Mount an empty skeleton first so populateArticle's enhanceTables call has
   // real layout to measure.
@@ -192,7 +205,9 @@ function render(detected, settings) {
   const toc = buildToc(article, headings);
   const { button: viewToggle, rawPre } = buildViewToggle(article, rawSource);
   const themeToggle = buildThemeToggle(settings);
+  const paletteControl = buildPaletteControl(settings);
   const paddingControl = buildPaddingControl(settings);
+  const zenControl = buildZenControl(settings);
   const exportControl = setupPrintExport(article, headings);
   const exportHtmlButton = setupExportHtml(article);
   const copySourceButton = buildCopySourceButton(() => currentSource);
@@ -204,7 +219,7 @@ function render(detected, settings) {
     container.prepend(toc);
   }
   main.append(rawPre);
-  const toolbar = buildToolbar([themeToggle, paddingControl, exportControl, exportHtmlButton, copySourceButton, viewToggle, folderButton].filter(Boolean));
+  const toolbar = buildToolbar([themeToggle, paletteControl, paddingControl, zenControl, exportControl, exportHtmlButton, copySourceButton, viewToggle, folderButton].filter(Boolean));
   document.body.append(toolbar);
 
   // populateArticle sized table breakouts before the TOC existed, i.e. against
@@ -238,7 +253,10 @@ function render(detected, settings) {
   // they'd read stale until the reader interacts with them directly.
   onSettingsChanged((patch) => {
     if (patch.theme) { applyTheme(patch.theme); themeToggle.skimSync?.(); }
+    if (patch.scheme) { applyScheme(patch.scheme); paletteControl.skimSync?.(); }
     if (patch.density) { applyDensity(patch.density); paddingControl.skimSync?.(); }
+    if (patch.zen !== undefined) { applyZen(patch.zen); zenControl.skimSync?.(); }
+    if (patch.printMargin) { applyPrintMargin(patch.printMargin); exportControl.skimSync?.(); }
   });
 
   // Auto-reload: poll the underlying file and re-render in place when it
@@ -250,7 +268,8 @@ function render(detected, settings) {
   // would stack a second document-level keydown listener). Likewise each TOC
   // owns its own scrollspy window listeners via an AbortController; tear the
   // old one down before replacing/removing it so listeners don't accumulate.
-  if (settings.autoReload) {
+  // Extension pages (the clipboard viewer) have no file behind them to poll.
+  if (settings.autoReload && location.protocol !== 'chrome-extension:') {
     watchSource({
       onChange: (text) => {
         currentSource = text;

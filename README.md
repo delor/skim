@@ -113,12 +113,15 @@ To read local `.md` files, the popup walks you through the one Chrome switch it 
 - **Auto-reload** — re-renders in place when the file changes on disk, with fallback transports and a silent failure mode so it never breaks the page.
 - **Copy for AI** — turn the whole rendered document back into clean markdown, ready to paste into your next prompt.
 - **Table of contents** sidebar with scrollspy.
-- **Light and dark themes**, plus a density setting, synced across devices via `chrome.storage.sync`.
+- **Light and dark themes** with six color schemes (grape, rosé, ocean, sunset, forest, mono), plus density and a zen mode that hides the sidebar. Synced across devices via `chrome.storage.sync`.
 - **Reading zoom** (opt-in).
 - **Hebrew/English bidi** — each block picks its own text direction for mixed RTL/LTR documents.
 - **Raw source view** and **copy-selection-as-markdown**.
-- **Print / export to PDF** with print-friendly styling.
+- **Print / export to PDF** with a real print layout: page margins, an optional numbered contents page, and headings kept with their text.
+- **Standalone HTML export** to a single self-contained file, fonts, math and diagrams inlined, so it opens anywhere offline.
 - **Tab / Shift+Tab** to step through the document block by block (and through table rows).
+- **Vim keys** — `j` / `k` scroll a line with eased motion, `gg` / `G` jump to the start or end, `Esc` clears the cursor. Honors reduced-motion.
+- **Render clipboard as MD** — one button in the popup opens copied markdown in a full Skim tab. Reload it to re-read the clipboard.
 - **Folder view** — enhances `file://` directory listings, plus a Folder button to jump to a file's containing folder.
 - **Force-render from the popup** — turn any page into a rendered markdown view on demand.
 - **Robust encoding handling** — UTF-8/UTF-16 BOM detection, windows-1252/1255 heuristics for undeclared legacy encodings.

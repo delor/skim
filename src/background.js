@@ -1,3 +1,5 @@
+import { isFileAccessAllowed } from './file-access-check.js';
+
 // Service worker: set the browser zoom for rendered markdown pages, on request
 // from the content script. tabs.setZoom needs no extra permissions; the tab id
 // comes from the message sender. Chrome remembers zoom per-origin, so repeat
@@ -13,8 +15,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // access is granted (checked on install/startup, and on-demand from the
 // popup after the user returns from chrome://extensions).
 async function refreshBadge() {
-  let allowed = false;
-  try { allowed = await chrome.extension.isAllowedFileSchemeAccess(); } catch { /* keep false */ }
+  const allowed = await isFileAccessAllowed();
   chrome.action.setBadgeText({ text: allowed ? '' : '!' });
   chrome.action.setBadgeBackgroundColor({ color: '#7aa2ff' });
 }
@@ -37,7 +38,7 @@ chrome.runtime.onStartup.addListener(refreshBadge);
     const { reloadSweepDone } = await chrome.storage.session.get('reloadSweepDone');
     if (reloadSweepDone) return;
     await chrome.storage.session.set({ reloadSweepDone: true });
-    const allowed = await chrome.extension.isAllowedFileSchemeAccess();
+    const allowed = await isFileAccessAllowed();
     if (!allowed) return;
     const tabs = await chrome.tabs.query({ url: 'file:///*' });
     for (const tab of tabs) {
@@ -61,9 +62,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (ctaOpenedThisSession) return;
   const url = changeInfo.url;
   if (!url || !MD_URL.test(url)) return;
-  let allowed = true;
-  try { allowed = await chrome.extension.isAllowedFileSchemeAccess(); } catch { /* keep true: don't prompt blind */ }
-  if (allowed) return;
+  if (await isFileAccessAllowed()) return;
   try {
     const { fileCtaDismissed } = await chrome.storage.sync.get('fileCtaDismissed');
     if (fileCtaDismissed) return;

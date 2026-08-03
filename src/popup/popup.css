@@ -6,6 +6,20 @@ label.row { grid-auto-flow: column; justify-content: start; align-items: center;
 select, button { font: inherit; background: #161b26; color: inherit; border: 1px solid #2c3344; border-radius: 6px; padding: 5px 8px; }
 button { cursor: pointer; }
 button.primary { background: #7aa2ff; border-color: #7aa2ff; color: #0d1017; font-weight: 600; }
+/* The one action people come to the popup for: give it real presence. */
+button.hero {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 11px 12px; margin-bottom: 4px;
+  background: linear-gradient(135deg, #7aa2ff, #a78bfa);
+  border: none; border-radius: 9px; color: #0d1017;
+  box-shadow: 0 2px 10px rgba(122, 162, 255, 0.3);
+}
+button.hero:hover { filter: brightness(1.07); }
+button.hero:active { transform: translateY(1px); }
+button.hero:disabled { opacity: 0.6; cursor: default; }
+.hero-icon { font-size: 19px; line-height: 1; }
+.hero-text { display: grid; gap: 1px; font-weight: 700; font-size: 13.5px; }
+.hero-text small { font-weight: 500; font-size: 11px; opacity: 0.72; }
 #file-cta { background: #131a2b; border-bottom: 1px solid #262b38; }
 #file-cta ol { margin: 0; padding-left: 18px; }
 footer { padding: 8px 12px; border-top: 1px solid #262b38; }

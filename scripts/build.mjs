@@ -25,12 +25,16 @@ async function vendorFonts() {
   await mkdir(dst, { recursive: true });
   const HEBREW_RANGE = 'U+0590-05FF, U+200F, U+FB1D-FB4F';
   const fonts = [
-    // Prose: Source Serif 4 (Latin) + Frank Ruhl Libre (Hebrew) — reads well and
-    // pairs with KaTeX's serif math.
+    // Prose: Source Serif 4 (Latin) + Arimo (Hebrew).
     { src: 'node_modules/@fontsource/source-serif-4/files/source-serif-4-latin-400-normal.woff2', file: 'source-serif-400.woff2', family: 'Skim Serif', weight: 400, range: null },
     { src: 'node_modules/@fontsource/source-serif-4/files/source-serif-4-latin-700-normal.woff2', file: 'source-serif-700.woff2', family: 'Skim Serif', weight: 700, range: null },
-    { src: 'node_modules/@fontsource/frank-ruhl-libre/files/frank-ruhl-libre-hebrew-400-normal.woff2', file: 'frank-ruhl-400.woff2', family: 'Skim Hebrew', weight: 400, range: HEBREW_RANGE },
-    { src: 'node_modules/@fontsource/frank-ruhl-libre/files/frank-ruhl-libre-hebrew-700-normal.woff2', file: 'frank-ruhl-700.woff2', family: 'Skim Hebrew', weight: 700, range: HEBREW_RANGE },
+    // Hebrew carries italics of its own: Hebrew has no italic forms, but marked
+    // wraps *emphasis* in <em> either way, so without these faces the browser
+    // would synthesize a slant.
+    { src: 'node_modules/@fontsource/arimo/files/arimo-hebrew-400-normal.woff2', file: 'arimo-400.woff2', family: 'Skim Hebrew', weight: 400, range: HEBREW_RANGE },
+    { src: 'node_modules/@fontsource/arimo/files/arimo-hebrew-700-normal.woff2', file: 'arimo-700.woff2', family: 'Skim Hebrew', weight: 700, range: HEBREW_RANGE },
+    { src: 'node_modules/@fontsource/arimo/files/arimo-hebrew-400-italic.woff2', file: 'arimo-400-italic.woff2', family: 'Skim Hebrew', weight: 400, style: 'italic', range: HEBREW_RANGE },
+    { src: 'node_modules/@fontsource/arimo/files/arimo-hebrew-700-italic.woff2', file: 'arimo-700-italic.woff2', family: 'Skim Hebrew', weight: 700, style: 'italic', range: HEBREW_RANGE },
     // Code: JetBrains Mono (Latin).
     { src: 'node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2', file: 'jetbrains-mono-400.woff2', family: 'Skim Mono', weight: 400, range: null },
     { src: 'node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2', file: 'jetbrains-mono-700.woff2', family: 'Skim Mono', weight: 700, range: null },
@@ -39,7 +43,7 @@ async function vendorFonts() {
   for (const f of fonts) {
     await cp(r(f.src), resolve(dst, f.file));
     faces.push(
-      `@font-face {\n  font-family: "${f.family}";\n  font-style: normal;\n  font-weight: ${f.weight};\n  font-display: swap;\n  src: url("webfonts/${f.file}") format("woff2");${f.range ? `\n  unicode-range: ${f.range};` : ''}\n}`
+      `@font-face {\n  font-family: "${f.family}";\n  font-style: ${f.style || 'normal'};\n  font-weight: ${f.weight};\n  font-display: swap;\n  src: url("webfonts/${f.file}") format("woff2");${f.range ? `\n  unicode-range: ${f.range};` : ''}\n}`
     );
   }
   await writeFile(r('vendor/fonts.css'), faces.join('\n\n') + '\n');

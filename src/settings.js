@@ -2,11 +2,14 @@
 // user across origins and devices. Falls back to defaults when the chrome
 // APIs are unavailable (tests, preview script).
 export const DEFAULTS = {
-  theme: 'dark',      // 'dark' | 'light'
+  theme: 'dark',      // 'dark' | 'light' (base brightness)
+  scheme: 'none',     // 'none' | 'grape' | 'rose' | 'ocean' | 'sunset' | 'forest' | 'mono' (color vibe)
   density: 'normal',  // 'normal' | 'big'
+  printMargin: 'narrow', // PDF export page margin: 'none' | 'narrow' | 'normal' | 'wide'
   readingZoom: 0,     // 0 = off; otherwise a browser zoom factor, e.g. 1.5
   autoReload: true,   // re-render when the underlying file changes
   mermaid: true,      // render ```mermaid fences as diagrams
+  zen: false,         // hide the table of contents and center the column
 };
 
 const hasSync = () => typeof chrome !== 'undefined' && chrome.storage?.sync;

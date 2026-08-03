@@ -30,7 +30,7 @@ This English paragraph stays left-to-right, while the one above it is RTL.
 
 ## Math (LaTeX)
 
-Inline: the mass–energy relation is $E = mc^2$, and $\alpha + \beta = \gamma$.
+Inline: the mass-energy relation is $E = mc^2$, and $\alpha + \beta = \gamma$.
 
 Block:
 

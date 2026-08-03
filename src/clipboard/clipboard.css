@@ -1,0 +1,30 @@
+/* Only the empty state lives here. Once there is markdown to show, the page is
+   rendered by the very same pipeline (and skim.css) a real .md file gets, which
+   is the moment data-skim-md appears and every rule below switches off. */
+body { margin: 0; }
+
+html:not([data-skim-md]) { background: #15151a; color: #cfcfd4; }
+html:not([data-skim-md])[data-theme="light"] { background: #f4f3ee; color: #3a3a40; }
+
+.skim-paste {
+  max-width: 34rem;
+  margin: 18vh auto 0;
+  padding: 2rem;
+  border: 1px dashed currentColor;
+  border-radius: 12px;
+  text-align: center;
+  font: 16px/1.6 system-ui, sans-serif;
+  opacity: 0.92;
+}
+.skim-paste h1 { margin: 0 0 0.5em; font-size: 1.3rem; }
+.skim-paste p { margin: 0.5em 0; opacity: 0.75; }
+.skim-paste kbd {
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.9em;
+  opacity: 0.9;
+}
+.skim-paste kbd + kbd { margin-inline-start: 3px; }

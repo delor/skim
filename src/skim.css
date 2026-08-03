@@ -18,11 +18,16 @@
   --skim-panel: #1f1f26;       /* code block panel */
   --skim-border: #3a3a44;
   --skim-quote: #9a9aa2;
-  /* Prose: serif (Source Serif 4 / Frank Ruhl Libre for Hebrew), pairs with
-     KaTeX math. Code: JetBrains Mono. Hebrew glyphs route via unicode-range in
-     the runtime-injected fonts.css. */
+  /* Prose: Source Serif 4 for Latin (pairs with KaTeX math), Arimo for Hebrew.
+     Code: JetBrains Mono. Hebrew glyphs route to their own family via
+     unicode-range in the runtime-injected fonts.css, which is why the Hebrew
+     face has to come first in the stack. */
   --body: "Skim Hebrew", "Skim Serif", Georgia, "Times New Roman", serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
-  --mono: "Skim Mono", "Skim Hebrew", ui-monospace, "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  /* Emoji families last: they only ever win for glyphs the mono faces lack. The
+     UI chrome is set in --mono, so without them the button icons fell through to
+     whatever monochrome symbol font the OS had, which is why ☀/⤓/⧉ looked like
+     stray dingbats next to the colour 🎨. */
+  --mono: "Skim Mono", "Skim Hebrew", ui-monospace, "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
 }
 
 html[data-skim-md="1"],
@@ -52,6 +57,28 @@ html[data-skim-md="1"] body.skim-body {
 .skim-container.has-toc .skim-main { margin-left: 1rem; }
 
 .skim.markdown-body { color: var(--skim-fg); word-wrap: break-word; }
+
+/* `dir` is applied semantically in bidi.js. Keep inherently LTR fragments in
+   their own bidi isolate so punctuation in code/math cannot leak into the
+   surrounding Hebrew/Arabic run. */
+.skim code,
+.skim kbd,
+.skim pre,
+.skim samp,
+.skim .skim-math,
+.skim .katex {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* When one Markdown paragraph contains whole sentences in the opposite
+   direction, bidi.js emits a semantic isolate. Block layout is intentional:
+   each language gets independent line wrapping and start alignment. */
+.skim .skim-bidi-segment {
+  display: block;
+  text-align: start;
+  margin-block-start: 0.45em;
+}
 
 /* Frontmatter card ------------------------------------------------------ */
 .skim-frontmatter {
@@ -160,8 +187,16 @@ html[data-skim-md="1"] body.skim-body {
 /* Lists --------------------------------------------------------------- */
 .skim ul, .skim ol { margin: 0 0 1em; padding-inline-start: 1.6em; }
 .skim li { margin: 0.25em 0; }
-.skim ul { list-style: none; padding-inline-start: 1.2em; }
-.skim ul > li::before { content: "• "; color: var(--skim-heading); margin-inline-start: -1.1em; }
+.skim ul { list-style: none; padding-inline-start: 1.35em; }
+.skim ul > li::before {
+  content: "•";
+  color: var(--skim-heading);
+  font-size: 1.45em;
+  line-height: 1;
+  vertical-align: -0.09em;
+  margin-inline-start: -0.95em;
+  margin-inline-end: 0.28em;
+}
 .skim li > ul, .skim li > ol { margin-top: 0.25em; }
 /* Task lists */
 .skim li.task-list-item, .skim li:has(> input[type="checkbox"]) { list-style: none; }
@@ -599,6 +634,53 @@ html.skim-lightbox-open { overflow: hidden; }
 .skim-padding-control.open .skim-padding-options { display: flex; }
 .skim-padding-opt.active { outline: 2px solid var(--skim-h1-fg); outline-offset: -1px; }
 
+/* "Export PDF" control: the button plus a page-margin picker, so the margin is
+   chosen where the export actually happens. */
+.skim-export-control { display: flex; flex-direction: column; gap: 0.35rem; }
+.skim-export-margins { display: flex; align-items: center; gap: 0.25rem; }
+.skim-export-margins-label {
+  font-family: var(--mono);
+  font-size: 0.68em;
+  color: var(--skim-muted);
+  margin-inline-end: 0.1rem;
+}
+.skim-toolbar-panel .skim-export-margin-opt {
+  flex: 1 1 0;
+  padding: 0.3em 0;
+  font-size: 0.72em;
+  box-shadow: none;
+}
+.skim-export-margin-opt.active { outline: 2px solid var(--skim-h1-fg); outline-offset: -1px; }
+
+/* "Zen" toggle: an on/off button (highlighted when Zen mode is active). */
+.skim-zen-toggle.active { outline: 2px solid var(--skim-h1-fg); outline-offset: -1px; }
+
+/* "Theme" control: a button that expands to a grid of color-scheme swatches. */
+.skim-palette-control { display: flex; flex-direction: column; gap: 0.4rem; }
+.skim-palette-options { display: none; grid-template-columns: 1fr 1fr; gap: 0.3rem; }
+.skim-palette-control.open .skim-palette-options { display: grid; }
+/* Chips render identically in dark and light — a fixed dark background with
+   light text — so the color swatches stay legible and pop in either theme
+   (independent of the currently applied palette variables). */
+.skim-toolbar-panel .skim-palette-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.4em 0.55em;
+  background: #2a2a2a !important;
+  color: #e8e8ea !important;
+  border: 1px solid #3d3d46 !important;
+}
+.skim-palette-opt.active { outline: 2px solid #e8e8ea; outline-offset: -1px; }
+.skim-palette-swatch {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.skim-palette-name { flex: 1 1 auto; text-align: start; }
+
 /* Reading density (toolbar "Padding" = Big): roomier lines and list spacing. */
 html[data-skim-md="1"][data-skim-density="big"] .skim-body { line-height: 1.95; }
 html[data-skim-md="1"][data-skim-density="big"] .skim li { margin: 0.6em 0; }
@@ -690,6 +772,12 @@ html[data-skim-md="1"][data-skim-density="big"] .skim blockquote { margin-bottom
   .skim-container.has-toc .skim-main { margin-left: 0; }
 }
 
+/* Zen mode: drop the table of contents and let the reading column center in the
+   viewport. The container already uses justify-content: center, so once the TOC
+   is gone and the has-toc left offset is cleared, .skim-main centers on its own. */
+html[data-skim-md="1"][data-skim-zen="on"] .skim-toc { display: none; }
+html[data-skim-md="1"][data-skim-zen="on"] .skim-container.has-toc .skim-main { margin-left: 0; }
+
 /* Block navigation (Tab / Shift+Tab) cursor indicator ------------------- */
 .skim .skim-block { scroll-margin-top: 3rem; }
 .skim .skim-block:focus { outline: none; }
@@ -709,6 +797,26 @@ html[data-skim-md="1"][data-skim-density="big"] .skim blockquote { margin-bottom
   width: 3px;
   border-radius: 2px;
   background: var(--skim-heading);
+}
+/* A list item's marker (the ul bullet, the ol number) is painted outside the
+   item's own box, right where the bar lands: the bar struck through the bullet
+   and the highlight stopped short of it. Resizing the item would shove the text
+   sideways whenever it became the current line, so instead stretch this pseudo
+   across the marker gutter: bar at the far edge, then the same wash as the row
+   behind the marker, meeting the row's own background exactly at the box edge. */
+.skim li.skim-current::after {
+  inset-inline-start: -2.6rem;
+  top: 0;
+  bottom: 0;
+  width: 2.6rem;
+  background: linear-gradient(to right, var(--skim-heading) 0 3px, rgba(74, 184, 245, 0.06) 3px);
+  border-radius: 0;
+  border-start-start-radius: 4px;
+  border-end-start-radius: 4px;
+}
+.skim li.skim-current[dir="rtl"]::after,
+[dir="rtl"] .skim li.skim-current::after {
+  background: linear-gradient(to left, var(--skim-heading) 0 3px, rgba(74, 184, 245, 0.06) 3px);
 }
 /* Replaced elements (images) can't use ::after — outline them instead. */
 .skim img.skim-current { outline: 3px solid var(--skim-heading); outline-offset: 5px; }
@@ -759,6 +867,335 @@ html[data-skim-md="1"][data-theme="light"] .skim-theme-toggle {
 }
 html[data-skim-md="1"][data-theme="light"] .skim-toast { color: #fff; }
 html[data-skim-md="1"][data-theme="light"] .skim-toc-link.active { background: rgba(0, 88, 209, 0.08); }
+
+/* ====================================================================== */
+/* Colored "vibe" schemes. Each layers on top of the base brightness via   */
+/* [data-theme][data-scheme], so every vibe has BOTH a dark and a light     */
+/* variant. Only CSS custom properties are overridden; the dark/light       */
+/* code-syntax palettes carry over from the matching [data-theme].          */
+/* ====================================================================== */
+
+/* Grape — purple with pink accents. */
+html[data-skim-md="1"][data-theme="dark"][data-scheme="grape"] {
+  --skim-bg: #1c1524;
+  --skim-fg: #e0d4e8;
+  --skim-heading: #d38bf0;
+  --skim-h1-fg: #ffe0f4;
+  --skim-h1-bg: #7d3faf;
+  --skim-h6: #f08fd4;
+  --skim-hr: #4a3a56;
+  --skim-link: #c07be0;
+  --skim-link-text: #f08fd4;
+  --skim-image: #ffb3e6;
+  --skim-muted: #9a86a8;
+  --skim-code-fg: #ff9ecf;
+  --skim-code-bg: #2b2033;
+  --skim-panel: #241a2e;
+  --skim-border: #43354f;
+  --skim-quote: #b9a6c6;
+}
+html[data-skim-md="1"][data-theme="light"][data-scheme="grape"] {
+  --skim-bg: #f6f0fb;
+  --skim-fg: #3a3040;
+  --skim-heading: #8a3fb0;
+  --skim-h1-fg: #f9eefc;
+  --skim-h1-bg: #9a4fc0;
+  --skim-h6: #b0448a;
+  --skim-hr: #e6d8ee;
+  --skim-link: #9a4fc0;
+  --skim-link-text: #b0448a;
+  --skim-image: #c05a9a;
+  --skim-muted: #8a7d94;
+  --skim-code-fg: #b03a7a;
+  --skim-code-bg: #efe4f4;
+  --skim-panel: #f0e6f6;
+  --skim-border: #e2d4ea;
+  --skim-quote: #6c6070;
+}
+
+/* Rosé — warm plum with pink and peach. */
+html[data-skim-md="1"][data-theme="dark"][data-scheme="rose"] {
+  --skim-bg: #241820;
+  --skim-fg: #ecdae0;
+  --skim-heading: #f0a0bc;
+  --skim-h1-fg: #ffe6ee;
+  --skim-h1-bg: #a8446a;
+  --skim-h6: #f6b98f;
+  --skim-hr: #543a44;
+  --skim-link: #e88bb0;
+  --skim-link-text: #f6b98f;
+  --skim-image: #ffc0d4;
+  --skim-muted: #a8909a;
+  --skim-code-fg: #ff9bb0;
+  --skim-code-bg: #33232b;
+  --skim-panel: #2c1e26;
+  --skim-border: #4f3844;
+  --skim-quote: #c6a9b4;
+}
+html[data-skim-md="1"][data-theme="light"][data-scheme="rose"] {
+  --skim-bg: #faf0f2;
+  --skim-fg: #40343a;
+  --skim-heading: #c04f78;
+  --skim-h1-fg: #fdeef2;
+  --skim-h1-bg: #c05070;
+  --skim-h6: #b86a3a;
+  --skim-hr: #eed8de;
+  --skim-link: #c05070;
+  --skim-link-text: #b86a3a;
+  --skim-image: #c85a86;
+  --skim-muted: #98868c;
+  --skim-code-fg: #c04068;
+  --skim-code-bg: #f4e4e8;
+  --skim-panel: #f6e8ec;
+  --skim-border: #ecd6dc;
+  --skim-quote: #6c5c62;
+}
+
+/* Ocean — navy with teal and blue. */
+html[data-skim-md="1"][data-theme="dark"][data-scheme="ocean"] {
+  --skim-bg: #101a24;
+  --skim-fg: #cfe0ea;
+  --skim-heading: #4ab8f5;
+  --skim-h1-fg: #dff0ff;
+  --skim-h1-bg: #2a6fae;
+  --skim-h6: #3fd0c0;
+  --skim-hr: #2f4656;
+  --skim-link: #4fc0d0;
+  --skim-link-text: #5fd0b8;
+  --skim-image: #7fb8ff;
+  --skim-muted: #7d94a4;
+  --skim-code-fg: #66d0e0;
+  --skim-code-bg: #172734;
+  --skim-panel: #142230;
+  --skim-border: #2c4152;
+  --skim-quote: #9fb4c2;
+}
+html[data-skim-md="1"][data-theme="light"][data-scheme="ocean"] {
+  --skim-bg: #eef4f9;
+  --skim-fg: #2f3a42;
+  --skim-heading: #2a6fae;
+  --skim-h1-fg: #eaf4ff;
+  --skim-h1-bg: #3a7fc0;
+  --skim-h6: #1f8f8a;
+  --skim-hr: #d6e2ec;
+  --skim-link: #2a7fae;
+  --skim-link-text: #1f8f8a;
+  --skim-image: #3a6fc0;
+  --skim-muted: #7d909c;
+  --skim-code-fg: #1f7f9a;
+  --skim-code-bg: #e2ecf4;
+  --skim-panel: #e8f0f6;
+  --skim-border: #d4e0ea;
+  --skim-quote: #5c6a72;
+}
+
+/* Sunset — warm orange into pink. */
+html[data-skim-md="1"][data-theme="dark"][data-scheme="sunset"] {
+  --skim-bg: #241a1a;
+  --skim-fg: #ecdcd2;
+  --skim-heading: #f0a56b;
+  --skim-h1-fg: #ffe8d8;
+  --skim-h1-bg: #b0563a;
+  --skim-h6: #f0846b;
+  --skim-hr: #543f38;
+  --skim-link: #f0a56b;
+  --skim-link-text: #f6a58f;
+  --skim-image: #ffb0d0;
+  --skim-muted: #a89488;
+  --skim-code-fg: #ff9e7a;
+  --skim-code-bg: #322422;
+  --skim-panel: #2b1f1d;
+  --skim-border: #4f3c34;
+  --skim-quote: #c6ab9e;
+}
+html[data-skim-md="1"][data-theme="light"][data-scheme="sunset"] {
+  --skim-bg: #faf1ec;
+  --skim-fg: #40352f;
+  --skim-heading: #c06a3a;
+  --skim-h1-fg: #fdefe6;
+  --skim-h1-bg: #c0603a;
+  --skim-h6: #c04f6a;
+  --skim-hr: #eeded4;
+  --skim-link: #c0603a;
+  --skim-link-text: #c04f6a;
+  --skim-image: #c85a86;
+  --skim-muted: #98897d;
+  --skim-code-fg: #c0562f;
+  --skim-code-bg: #f4e8e2;
+  --skim-panel: #f6ece6;
+  --skim-border: #ecdcd2;
+  --skim-quote: #6c5f56;
+}
+
+/* Forest — green with lime accents. */
+html[data-skim-md="1"][data-theme="dark"][data-scheme="forest"] {
+  --skim-bg: #141d18;
+  --skim-fg: #d6e4d8;
+  --skim-heading: #6bd48f;
+  --skim-h1-fg: #e2f5e6;
+  --skim-h1-bg: #2f7d4f;
+  --skim-h6: #a8c34a;
+  --skim-hr: #2f4638;
+  --skim-link: #5fc088;
+  --skim-link-text: #a8c34a;
+  --skim-image: #8fd0a0;
+  --skim-muted: #849a88;
+  --skim-code-fg: #7fd0a0;
+  --skim-code-bg: #1a2820;
+  --skim-panel: #16231b;
+  --skim-border: #2c4234;
+  --skim-quote: #a4b8a8;
+}
+html[data-skim-md="1"][data-theme="light"][data-scheme="forest"] {
+  --skim-bg: #eef5ee;
+  --skim-fg: #2f3a32;
+  --skim-heading: #2f8f54;
+  --skim-h1-fg: #eaf6ec;
+  --skim-h1-bg: #3a9a5c;
+  --skim-h6: #6a8f2f;
+  --skim-hr: #d8e6da;
+  --skim-link: #2f8f54;
+  --skim-link-text: #6a8f2f;
+  --skim-image: #3f9a68;
+  --skim-muted: #7d907d;
+  --skim-code-fg: #2f8054;
+  --skim-code-bg: #e4efe4;
+  --skim-panel: #eaf2ea;
+  --skim-border: #d6e4d8;
+  --skim-quote: #5c6a5e;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Mono — built for black & white printing.                                */
+/*                                                                          */
+/* A mono laser printer has no greys: it fakes them by halftoning (a dot    */
+/* screen), so the palette is really a set of tones that survive that.      */
+/* What that costs us:                                                      */
+/*   - Page background stays pure white. Any tint halftones the WHOLE sheet */
+/*     grey and eats toner; it is the one colour that must not be themed.   */
+/*   - Body text is near-black. Grey text is halftoned and comes out fuzzy  */
+/*     at body size, so grey is reserved for large/bold or non-prose bits.  */
+/*   - Fills are ≤12% (fine, sparse dots that read as a tint) or ≥85%       */
+/*     (reads as solid ink). The 40–60% midtones that look fine on screen   */
+/*     are exactly where halftoning is most visible, so nothing lands there */
+/*     except hairline rules, where the texture doesn't matter.             */
+/*   - Hue can't carry meaning at all, so the roles that were colour-coded  */
+/*     (headings, links, alert types) separate by tone, weight and border   */
+/*     style instead.                                                       */
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] {
+  --skim-bg: #ffffff;          /* never tint the sheet */
+  --skim-fg: #111111;          /* solid ink, no halftone */
+  --skim-heading: #000000;     /* headings separate by size/weight, not hue */
+  --skim-h1-fg: #ffffff;       /* reverse text on a solid bar prints crisp */
+  --skim-h1-bg: #111111;
+  --skim-h6: #3a3a3a;
+  --skim-hr: #8a8a8a;
+  --skim-link: #111111;
+  --skim-link-text: #111111;   /* links read by their underline */
+  --skim-image: #3a3a3a;
+  --skim-muted: #5e5e5e;       /* metadata only, never body prose */
+  --skim-code-fg: #111111;
+  --skim-code-bg: #f0f0f0;     /* ~6% — a light screen, not a grey box */
+  --skim-panel: #f4f4f4;
+  --skim-border: #b4b4b4;
+  --skim-quote: #2b2b2b;
+}
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim strong { color: #000000; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim em { color: #111111; }
+/* Alert types can't be told apart by hue here, so each gets its own tone and
+   left-border style on top of its existing icon and title. */
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim-alert {
+  --skim-alert-bg: rgba(0, 0, 0, 0.05);
+  --skim-alert-accent: #111111;
+}
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim-alert-note      { border-inline-start-style: solid;  --skim-alert-accent: #111111; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim-alert-tip       { border-inline-start-style: dashed; --skim-alert-accent: #3a3a3a; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim-alert-important { border-inline-start-style: double; border-inline-start-width: 5px; --skim-alert-accent: #111111; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim-alert-warning   { border-inline-start-style: dotted; --skim-alert-accent: #111111; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim-alert-caution   { border-inline-start-style: solid;  border-inline-start-width: 6px; --skim-alert-accent: #000000; }
+/* Tables: a solid header band with reverse text, then a barely-there zebra. */
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim th { background: #1a1a1a; color: #ffffff; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim tr:nth-child(even) td { background: #f2f2f2; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim blockquote { border-inline-start-color: #111111; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .skim-stars-2 { color: #111111; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .skim-stars-1 { color: #6e6e6e; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim pre.skim-code code { color: #111111; }
+/* Syntax: tone + weight + italic instead of colour. Keywords are the darkest
+   and bold, comments the lightest and italic, so structure survives greyscale. */
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-comment,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-quote { color: #6e6e6e; font-style: italic; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-keyword,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-selector-tag,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-operator,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-doctag { color: #000000; font-weight: 700; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-built_in,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-type,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-attr,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-attribute,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-selector-attr,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-title.class_,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-title.function_,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-title { color: #1a1a1a; font-weight: 600; }
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-string,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-number,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-literal,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-regexp,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-symbol,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-meta,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-variable,
+html[data-skim-md="1"][data-theme="light"][data-scheme="mono"] .skim .hljs-params { color: #3f3f3f; }
+
+/* Mono, dark variant — the same "no hue" rules inverted for screen reading.
+   Exports always print the light one. */
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] {
+  --skim-bg: #131313;
+  --skim-fg: #e8e8e8;
+  --skim-heading: #ffffff;
+  --skim-h1-fg: #111111;
+  --skim-h1-bg: #e8e8e8;
+  --skim-h6: #bdbdbd;
+  --skim-hr: #4a4a4a;
+  --skim-link: #ffffff;
+  --skim-link-text: #ffffff;
+  --skim-image: #c4c4c4;
+  --skim-muted: #949494;
+  --skim-code-fg: #f0f0f0;
+  --skim-code-bg: #262626;
+  --skim-panel: #1c1c1c;
+  --skim-border: #3d3d3d;
+  --skim-quote: #c8c8c8;
+}
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim strong { color: #ffffff; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim-alert {
+  --skim-alert-bg: rgba(255, 255, 255, 0.06);
+  --skim-alert-accent: #e8e8e8;
+}
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim-alert-tip       { border-inline-start-style: dashed; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim-alert-important { border-inline-start-style: double; border-inline-start-width: 5px; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim-alert-warning   { border-inline-start-style: dotted; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim-alert-caution   { border-inline-start-width: 6px; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim th { background: #2e2e2e; color: #ffffff; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim tr:nth-child(even) td { background: #1a1a1a; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-comment,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-quote { color: #8f8f8f; font-style: italic; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-keyword,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-selector-tag,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-operator,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-doctag { color: #ffffff; font-weight: 700; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-built_in,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-type,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-attr,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-title.class_,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-title.function_,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-title { color: #ededed; font-weight: 600; }
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-string,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-number,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-literal,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-regexp,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-symbol,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-meta,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-variable,
+html[data-skim-md="1"][data-theme="dark"][data-scheme="mono"] .skim .hljs-params { color: #c2c2c2; }
 
 /* Light syntax palette (GitHub-light flavored) for code blocks. */
 html[data-skim-md="1"][data-theme="light"] .skim .hljs-comment,
@@ -835,6 +1272,18 @@ html[data-skim-md="1"][data-theme="light"] .skim .hljs-params { color: #24292e; 
 /* Section number stamped onto a body heading during export. */
 .skim-print-num { font-variant-numeric: tabular-nums; }
 
+/* Gutter table (print.js): a table only so its empty thead/tfoot rows can
+   repeat as page margins on every printed page. It exists only during an
+   export, but keep it inert on screen in case a print is abandoned before the
+   afterprint cleanup lands — as blocks it lays out exactly like the content
+   did unwrapped. */
+.skim-print-page { display: block; width: 100%; border-collapse: collapse; }
+.skim-print-page > thead,
+.skim-print-page > tfoot { display: none; }
+.skim-print-page > tbody,
+.skim-print-page > tbody > tr,
+.skim-print-page > tbody > tr > td { display: block; }
+
 @media print {
   /* Print colors faithfully — backgrounds (dark page, H1 bars) and accents. */
   html[data-skim-md="1"],
@@ -844,21 +1293,50 @@ html[data-skim-md="1"][data-theme="light"] .skim .hljs-params { color: #24292e; 
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  /* Fallback margin for a plain browser-menu print. Our own export replaces it
+     with `@page { margin: 0 }` (injected by print.js) and draws the margin with
+     the gutter table below, so the themed page colour reaches the paper edge
+     instead of sitting inside a white frame. */
   @page { margin: 1.6cm; }
 
-  /* Light export prints on pure white so the page matches the white margins
-     the OS adds (no off-white block floating in white). Also darken the muted
-     greys that wash out on paper — blockquotes and body text. */
+  /* Page margins, drawn inside the sheet. thead/tfoot repeat on every printed
+     page (padding would only indent the first and last), so the empty gutter
+     rows become the top/bottom margin and the cell padding the side margins. */
+  /* Size follows the `printMargin` setting (popup → PDF margin). The @page
+     fallback above stays at the Normal value: it only ever applies to a plain
+     browser-menu print, which has no gutter table to size. */
+  html[data-skim-md="1"] { --skim-print-margin: 1.6cm; }
+  html[data-skim-md="1"][data-skim-print-margin="none"]   { --skim-print-margin: 0cm; }
+  html[data-skim-md="1"][data-skim-print-margin="narrow"] { --skim-print-margin: 0.8cm; }
+  html[data-skim-md="1"][data-skim-print-margin="wide"]   { --skim-print-margin: 2.4cm; }
+  .skim-print-page { display: table; table-layout: fixed; width: 100%; }
+  .skim-print-page > thead { display: table-header-group; }
+  .skim-print-page > tfoot { display: table-footer-group; }
+  .skim-print-page > tbody { display: table-row-group; }
+  .skim-print-page > tbody > tr { display: table-row; }
+  .skim-print-page .skim-print-gutter { height: var(--skim-print-margin); padding: 0; border: 0; }
+  .skim-print-page .skim-print-cell {
+    display: table-cell;
+    padding: 0 var(--skim-print-margin);
+    border: 0;
+    vertical-align: top;
+  }
+  /* The cover sits outside the table (it is a page of its own), so it pads
+     itself. */
+  .skim-print-cover { padding: var(--skim-print-margin); }
+
+  /* Darken the muted greys that wash out on paper — blockquotes and body text.
+     The page keeps its theme colour: with a zero page margin there is no white
+     frame left for an off-white background to clash with. */
   html[data-skim-md="1"][data-theme="light"] {
-    --skim-bg: #ffffff;
     --skim-fg: #2b2b30;
     --skim-muted: #5a5a54;
     --skim-quote: #46463f;
   }
 
-  /* Section numbers replace the on-screen "##/###" glamour prefixes in print. */
-  .skim h2::before, .skim h3::before, .skim h4::before,
-  .skim h5::before, .skim h6::before { content: "" !important; }
+  /* The "##/###" glamour prefixes print too — they're part of the look, and
+     they mark the heading level on paper where the type scale alone is subtle.
+     Any section number the export adds follows the hashes ("## 1.5 Title"). */
 
   /* Hide every piece of on-screen chrome. */
   .skim-toolbar,
@@ -900,12 +1378,35 @@ html[data-skim-md="1"][data-theme="light"] .skim .hljs-params { color: #24292e; 
     width: 100% !important;
     max-width: 100% !important;
     table-layout: auto;
+    /* A hair smaller than body text. On screen a too-wide table scrolls inside
+       its wrapper; on paper it has nowhere to go, and cells holding rendered
+       math can't wrap at all — so buy back a few percent of width where it
+       costs the least. */
+    font-size: 0.95em;
   }
+  /* break-word, never `anywhere`: the wrap opportunities `anywhere` introduces
+     count toward min-content sizing, so the auto table layout believes a prose
+     column can be one character wide and starves it next to a column of
+     unbreakable math — that's what turned "What it assumes" into a ladder of
+     "assum / es". break-word still breaks a single over-long token (a URL, a
+     long identifier) rather than letting it overflow the page, but leaves the
+     column's real min-content width intact. */
   .skim th, .skim td {
     white-space: normal !important;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    padding: 0.28em 0.45em;   /* tighter than on screen: page width is scarce */
   }
+  /* The sort indicator is hidden in print, so the gutter reserved for it is
+     dead width — several em across a three-column table. */
+  .skim th.skim-sortable { padding-right: 0.45em; }
+  /* Rendered math is a single unbreakable box, so a formula-heavy column sets
+     the table's minimum width outright and is what pushes a table past the
+     page. KaTeX's default 1.21em is a screen-reading size; at body size the
+     formulas still read fine and the table fits. */
+  .skim th .skim-math-inline .katex,
+  .skim td .skim-math-inline .katex,
+  .skim th .skim-math-display .katex,
+  .skim td .skim-math-display .katex { font-size: 1em; }
   .skim thead th { position: static !important; }   /* drop sticky positioning */
   .skim thead { display: table-header-group; }       /* repeat header per page */
 

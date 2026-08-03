@@ -11,11 +11,22 @@
   </section>
 
   <section id="controls" hidden>
+    <button id="clip-render" class="hero">
+      <span class="hero-icon" aria-hidden="true">📋</span>
+      <span class="hero-text">Render clipboard as MD<small>Opens your copied markdown in a new tab</small></span>
+    </button>
+
     <label>Theme
       <select id="theme"><option value="dark">Dark</option><option value="light">Light</option></select>
     </label>
+    <label>Color scheme
+      <select id="scheme"><option value="none">None</option><option value="grape">Grape</option><option value="rose">Rosé</option><option value="ocean">Ocean</option><option value="sunset">Sunset</option><option value="forest">Forest</option><option value="mono">Mono (B&amp;W print)</option></select>
+    </label>
     <label>Reading zoom
       <select id="zoom"><option value="0">Off</option><option value="1.25">125%</option><option value="1.5">150%</option></select>
+    </label>
+    <label>PDF margin
+      <select id="print-margin"><option value="none">None</option><option value="narrow">Narrow (0.8 cm)</option><option value="normal">Normal (1.6 cm)</option><option value="wide">Wide (2.4 cm)</option></select>
     </label>
     <label class="row"><input type="checkbox" id="autoreload"> Auto-reload when the file changes</label>
     <label class="row"><input type="checkbox" id="mermaid"> Render mermaid diagrams</label>

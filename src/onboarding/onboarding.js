@@ -1,20 +1,16 @@
 import { renderMarkdown } from '../render.js';
-
-async function fileAccessAllowed() {
-  try { return await chrome.extension.isAllowedFileSchemeAccess(); }
-  catch { return false; }
-}
+import { isFileAccessAllowed } from '../file-access-check.js';
 
 async function watchFileAccess() {
   const status = document.getElementById('file-status');
   const step = document.getElementById('step-file');
   const tick = async () => {
-    const ok = await fileAccessAllowed();
-    status.textContent = ok ? '✓ enabled' : '— not enabled yet';
+    const ok = await isFileAccessAllowed();
+    status.textContent = ok ? '✓ enabled' : 'not enabled yet';
     status.classList.toggle('ok', ok);
     step.classList.toggle('done', ok);
     if (ok) {
-      // Access just got granted (this loop stops here) — clear the "!" badge
+      // Access just got granted (this loop stops here), so clear the "!" badge
       // immediately instead of waiting for the next install/startup check.
       chrome.runtime.sendMessage({ type: 'skim-refresh-badge' }).catch(() => {});
     } else {

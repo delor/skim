@@ -1,9 +1,114 @@
 import './setup-dom.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 const { protectMath, bareTextToProse, b64decode, renderMarkdown } = await import('../src/render.js');
 const { hasMarkdownExtension, findPlaintextPre, detectMarkdown, isHugeSource } = await import('../src/detect.js');
+const { textDirection, applyBidi } = await import('../src/bidi.js');
+
+// --- bidirectional prose ----------------------------------------------
+test('bidi ignores a leading exercise label and uses the opening prose direction', () => {
+  assert.equal(
+    textDirection('(a) נתונים עם אותו מפתח חייבים להימצא באותה מחיצה כדי לבצע shuffle'),
+    'rtl'
+  );
+});
+
+test('bidi keeps a genuinely English explanation LTR', () => {
+  assert.equal(
+    textDirection('(b) broadcast the small side and materialize it; הטבלה הגדולה never moves'),
+    'ltr'
+  );
+});
+
+test('applyBidi isolates code and does not let it determine prose direction', () => {
+  const article = document.createElement('article');
+  article.innerHTML = '<p>(a) <code>sites_df = broadcast(sites_df)</code> הסבר ארוך בעברית בלבד</p>';
+
+  applyBidi(article);
+
+  assert.equal(article.querySelector('p').getAttribute('dir'), 'rtl');
+  assert.equal(article.querySelector('code').getAttribute('dir'), 'ltr');
+});
+
+test('applyBidi handles Hebrew summary text with inline LaTeX as an isolated LTR run', () => {
+  const article = document.createElement('article');
+  article.innerHTML = renderMarkdown([
+    '<details>',
+    '<summary>(a) עבור כל איבר מחשבים $x_i = y_i + 1$ ואז ממשיכים בעברית</summary>',
+    '',
+    'תוכן נוסף.',
+    '</details>',
+  ].join('\n'));
+
+  applyBidi(article);
+
+  const summary = article.querySelector('summary');
+  const math = summary.querySelector('.skim-math');
+  assert.ok(math, 'inline LaTeX rendered inside the summary');
+  assert.equal(summary.getAttribute('dir'), 'rtl');
+  assert.equal(math.getAttribute('dir'), 'ltr');
+});
+
+test('applyBidi keeps Hebrew explanation RTL when a long English Gloss follows', () => {
+  const article = document.createElement('article');
+  article.innerHTML = [
+    '<details open>',
+    '<summary>Drill 3. English question with <code>events_df.join(sites_df)</code></summary>',
+    '<p>(a) נתונים עם אותו מפתח חייבים להימצא באותה מחיצה, וברירת המחדל היא join.',
+    ' Gloss: (a) a shuffle, executed at the action, not at the join line.',
+    ' (b) broadcast the small side and materialize it with a count; the big table never moves.</p>',
+    '</details>',
+  ].join('');
+
+  applyBidi(article);
+
+  assert.equal(article.querySelector('summary').getAttribute('dir'), 'ltr');
+  assert.equal(article.querySelector('p').getAttribute('dir'), 'rtl');
+  assert.equal(article.querySelector('code').getAttribute('dir'), 'ltr');
+  const gloss = article.querySelector('p > bdi.skim-bidi-segment');
+  assert.ok(gloss, 'the sustained English suffix gets its own bidi paragraph');
+  assert.equal(gloss.getAttribute('dir'), 'ltr');
+  assert.match(gloss.textContent.trim(), /^Gloss: \(a\) a shuffle/);
+  assert.match(gloss.textContent.trim(), /the big table never moves\.$/);
+});
+
+test('applyBidi isolates sentence-level direction changes without relying on a Gloss label', () => {
+  const article = document.createElement('article');
+  article.innerHTML = [
+    '<p>זהו משפט פתיחה בעברית.',
+    ' This is an independently wrapped English sentence.',
+    ' This continuation remains in the same isolate.</p>',
+  ].join('');
+
+  applyBidi(article);
+
+  const paragraph = article.querySelector('p');
+  const isolate = paragraph.querySelector('bdi.skim-bidi-segment');
+  assert.equal(paragraph.getAttribute('dir'), 'rtl');
+  assert.equal(isolate.getAttribute('dir'), 'ltr');
+  assert.match(isolate.textContent, /independently wrapped/);
+  assert.match(isolate.textContent, /continuation remains/);
+});
+
+test('applyBidi handles bilingual blocks independently and preserves authored dir', () => {
+  const article = document.createElement('article');
+  article.innerHTML = [
+    '<p>(a) משפט ארוך בעברית עם English term</p>',
+    '<p>An English paragraph with מילה אחת.</p>',
+    '<p dir="rtl">This explicit author direction wins.</p>',
+    '<p>123 — …</p>',
+  ].join('');
+
+  applyBidi(article);
+
+  const paragraphs = [...article.querySelectorAll('p')];
+  assert.equal(paragraphs[0].getAttribute('dir'), 'rtl');
+  assert.equal(paragraphs[1].getAttribute('dir'), 'ltr');
+  assert.equal(paragraphs[2].getAttribute('dir'), 'rtl');
+  assert.equal(paragraphs[3].hasAttribute('dir'), false, 'neutral text inherits');
+});
 const { slugify, collectHeadings, buildToc } = await import('../src/ui.js');
 const { setupBlockNavigation } = await import('../src/nav.js');
 const { extractFrontmatter, buildFrontmatterCard } = await import('../src/frontmatter.js');
@@ -526,7 +631,9 @@ test('htmlToMarkdown drops table UI controls but keeps the table', () => {
 
 // --- anchors & internal links -----------------------------------------
 const { createAnchorMarkup, setupAnchors } = await import('../src/anchors.js');
-const { stripTrailingId, applyTheme, applyDensity, buildThemeToggle, buildPaddingControl } = await import('../src/ui.js');
+const { stripTrailingId, applyTheme, applyScheme, applyDensity, buildThemeToggle, buildPaddingControl, applyZen, buildZenControl } = await import('../src/ui.js');
+const { setupPrintExport } = await import('../src/print.js');
+const { applyPrintMargin } = await import('../src/ui.js');
 
 test('createAnchorMarkup turns {#id} into an empty anchor target', () => {
   const a = document.createElement('article');
@@ -573,10 +680,12 @@ test('enhanceTables + setupAnchors tear down their previous listeners each pass 
   };
 
   let resizeCalls = 0;
+  let popstateCalls = 0;
   const origWindowAdd = window.addEventListener.bind(window);
   window.addEventListener = (type, fn, opts) => {
-    if (type !== 'resize') return origWindowAdd(type, fn, opts);
-    return origWindowAdd(type, (...args) => { resizeCalls++; fn(...args); }, opts);
+    if (type === 'resize') return origWindowAdd(type, (...args) => { resizeCalls++; fn(...args); }, opts);
+    if (type === 'popstate') return origWindowAdd(type, (...args) => { popstateCalls++; fn(...args); }, opts);
+    return origWindowAdd(type, fn, opts);
   };
 
   let clickCalls = 0;
@@ -591,11 +700,13 @@ test('enhanceTables + setupAnchors tear down their previous listeners each pass 
     runPass(2); // reload: must abort pass 1's listeners before attaching new ones
 
     window.dispatchEvent(new window.Event('resize'));
+    window.dispatchEvent(new window.Event('popstate'));
     article.querySelector('a[href^="#"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     assert.equal(resizeCalls, 1, 'only the current pass\'s resize listener should fire — no accumulation across reloads');
     assert.equal(clickCalls, 1, 'only the current pass\'s click listener should fire — no accumulation across reloads');
+    assert.equal(popstateCalls, 1, 'only the current pass\'s popstate listener should fire — no accumulation across reloads');
   } finally {
     window.addEventListener = origWindowAdd;
     article.addEventListener = origArticleAdd;
@@ -610,6 +721,46 @@ test('applyTheme sets data-theme, treating anything but "light" as dark', () => 
   assert.equal(document.documentElement.getAttribute('data-theme'), 'dark');
   applyTheme('nonsense');
   assert.equal(document.documentElement.getAttribute('data-theme'), 'dark');
+});
+
+test('applyScheme sets data-scheme for colored vibes, clearing it for none/unknown', () => {
+  applyScheme('grape');
+  assert.equal(document.documentElement.getAttribute('data-scheme'), 'grape');
+  applyScheme('ocean');
+  assert.equal(document.documentElement.getAttribute('data-scheme'), 'ocean');
+  applyScheme('none');
+  assert.equal(document.documentElement.getAttribute('data-scheme'), null);
+  applyScheme('grape');
+  applyScheme('nonsense');
+  assert.equal(document.documentElement.getAttribute('data-scheme'), null);
+});
+
+test('mono is a selectable scheme and every scheme has both a dark and a light palette', async () => {
+  const { SCHEMES } = await import('../src/ui.js');
+  const css = await readFile(new URL('../src/skim.css', import.meta.url), 'utf8');
+  assert.ok(SCHEMES.some((s) => s.id === 'mono'), 'mono offered in the palette picker');
+  applyScheme('mono');
+  assert.equal(document.documentElement.getAttribute('data-scheme'), 'mono');
+  for (const { id } of SCHEMES.filter((s) => s.id !== 'none')) {
+    for (const theme of ['dark', 'light']) {
+      assert.ok(css.includes(`[data-theme="${theme}"][data-scheme="${id}"] {`), `${id} has a ${theme} palette`);
+    }
+  }
+  // The whole point of mono: a tint would halftone the entire printed sheet.
+  const monoLight = css.slice(css.indexOf('[data-theme="light"][data-scheme="mono"] {'));
+  assert.match(monoLight.slice(0, 400), /--skim-bg:\s*#ffffff/);
+});
+
+test('printMargin: a setting, applied to <html>, with a tier per value in the print CSS', async () => {
+  const { DEFAULTS } = await import('../src/settings.js');
+  const css = await readFile(new URL('../src/skim.css', import.meta.url), 'utf8');
+  assert.equal(DEFAULTS.printMargin, 'narrow');
+  applyPrintMargin('narrow');
+  assert.equal(document.documentElement.getAttribute('data-skim-print-margin'), 'narrow');
+  for (const value of ['none', 'narrow', 'wide']) {
+    assert.match(css, new RegExp(`\\[data-skim-print-margin="${value}"\\][^{]*\\{\\s*--skim-print-margin:`),
+      `${value} sizes the gutter`);
+  }
 });
 
 test('applyDensity reflects the given density on <html data-skim-density>', () => {
@@ -794,6 +945,223 @@ test('buildPaddingControl reflects settings.density and persists a click via set
   assert.equal(data.density, 'big');
 });
 
+test('applyZen reflects on/off on <html data-skim-zen>', () => {
+  applyZen(true);
+  assert.equal(document.documentElement.getAttribute('data-skim-zen'), 'on');
+  applyZen(false);
+  assert.equal(document.documentElement.getAttribute('data-skim-zen'), 'off');
+});
+
+test('buildZenControl reflects settings.zen and toggles + persists on click', async () => {
+  const data = installFakeChromeStorage();
+  const btn = buildZenControl({ zen: false });
+  assert.equal(document.documentElement.getAttribute('data-skim-zen'), 'off');
+  assert.ok(!btn.classList.contains('active'));
+  assert.match(btn.textContent, /Zen/);
+  btn.click();
+  assert.equal(document.documentElement.getAttribute('data-skim-zen'), 'on');
+  assert.ok(btn.classList.contains('active'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(data.zen, true);
+  btn.click();
+  assert.equal(document.documentElement.getAttribute('data-skim-zen'), 'off');
+  assert.ok(!btn.classList.contains('active'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(data.zen, false);
+});
+
+test('buildZenControl starting on renders the active on-state', () => {
+  installFakeChromeStorage();
+  const btn = buildZenControl({ zen: true });
+  assert.equal(document.documentElement.getAttribute('data-skim-zen'), 'on');
+  assert.ok(btn.classList.contains('active'));
+  assert.match(btn.textContent, /On/);
+});
+
+test('print export expands collapsed <details> then restores each to its prior state', () => {
+  const article = document.createElement('article');
+  article.className = 'skim markdown-body';
+  const main = document.createElement('main');
+  main.className = 'skim-main';
+  main.append(article);
+  document.body.append(main);
+  article.innerHTML = [
+    '<h2 id="a">A</h2>',
+    '<details><summary>closed</summary><p>body 1</p></details>',
+    '<details open><summary>open</summary><p>body 2</p></details>',
+  ].join('');
+  const detailsEls = [...article.querySelectorAll('details')];
+  assert.deepEqual(detailsEls.map((d) => d.open), [false, true]);
+
+  // Capture the open-state at the moment print() fires (Chromium runs print
+  // synchronously and afterprint has already fired by the time it returns).
+  let during = null;
+  const origPrint = window.print;
+  window.print = () => {
+    during = detailsEls.map((d) => d.open);
+    window.dispatchEvent(new window.Event('afterprint'));
+  };
+  try {
+    setupPrintExport(article, [{ level: 2, text: 'A', id: 'a', html: 'A' }])
+      .querySelector('.skim-export-toggle').click();
+  } finally {
+    window.print = origPrint;
+  }
+
+  assert.deepEqual(during, [true, true], 'both details open during print');
+  assert.deepEqual(detailsEls.map((d) => d.open), [false, true], 'restored: closed re-closes, open stays open');
+  main.remove();
+});
+
+// Runs the export flow and reports what numbering it produced.
+function printNumbering(headingTexts) {
+  const article = document.createElement('article');
+  article.className = 'skim markdown-body';
+  article.innerHTML = headingTexts.map((t, i) => `<h2 id="h${i}">${t}</h2><p>x</p>`).join('');
+  const main = document.createElement('main');
+  main.className = 'skim-main';
+  main.append(article);
+  document.body.append(main);
+
+  let during = null;
+  const origPrint = window.print;
+  window.print = () => {
+    during = {
+      stamps: [...article.querySelectorAll('.skim-print-num')].map((s) => s.textContent.trim()),
+      tocNums: [...main.querySelectorAll('.skim-print-toc-num')].map((s) => s.textContent),
+      headings: [...article.querySelectorAll('h2')].map((h) => h.textContent),
+    };
+    window.dispatchEvent(new window.Event('afterprint'));
+  };
+  try {
+    setupPrintExport(article, headingTexts.map((t, i) => ({ level: 2, text: t, id: `h${i}`, html: t })))
+      .querySelector('.skim-export-toggle').click();
+  } finally {
+    window.print = origPrint;
+    main.remove();
+  }
+  return during;
+}
+
+test('print export numbers unnumbered sections', () => {
+  const r = printNumbering(['The probabilistic model', 'Retrieval', '2024 in review']);
+  assert.deepEqual(r.stamps, ['1', '2', '3']);
+  assert.deepEqual(r.tocNums, ['1', '2', '3'], 'cover TOC matches the body');
+});
+
+test('print export leaves a self-numbered document alone (no "1.5 5. Model")', () => {
+  for (const style of [
+    ['5. The probabilistic model', '6. Evaluation'],
+    ['5) The probabilistic model', '6) Evaluation'],
+    ['5.1 The probabilistic model', '5.2 Evaluation'],
+    ['5.1. The probabilistic model', '5.2. Evaluation'],
+    ['01-02. Term weighting and VSM', '06. Language models'],   // a ranged section number
+  ]) {
+    const r = printNumbering(style);
+    assert.deepEqual(r.stamps, [], `no stamps for ${style[0]}`);
+    assert.deepEqual(r.tocNums, [], `no TOC number column for ${style[0]}`);
+    assert.deepEqual(r.headings, style, 'heading text untouched');
+  }
+});
+
+test('HTML export carries the whole look, not just dark/light', async () => {
+  const { buildStandaloneHtml } = await import('../src/export-html.js');
+  globalThis.chrome = { runtime: { getURL: (p) => `chrome-extension://fake/${p}` } };
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, text: async () => '/* css */' });
+
+  const root = document.documentElement;
+  root.setAttribute('data-theme', 'light');
+  root.setAttribute('data-scheme', 'mono');
+  root.setAttribute('data-skim-density', 'big');
+  const article = document.createElement('article');
+  article.className = 'skim markdown-body';
+  const main = document.createElement('main');
+  main.className = 'skim-main';
+  main.append(article);
+  document.body.append(main);
+
+  try {
+    const html = await buildStandaloneHtml(article);
+    assert.match(html, /data-theme="light"/);
+    assert.match(html, /data-scheme="mono"/, 'the colour scheme travels with the export');
+    assert.match(html, /data-skim-density="big"/);
+  } finally {
+    globalThis.fetch = origFetch;
+    main.remove();
+    root.removeAttribute('data-scheme');
+    root.removeAttribute('data-skim-density');
+  }
+});
+
+test('the export control carries a margin picker that writes the setting', () => {
+  const stored = installFakeChromeStorage();
+  const article = document.createElement('article');
+  article.className = 'skim markdown-body';
+  const control = setupPrintExport(article, []);
+
+  const opts = [...control.querySelectorAll('.skim-export-margin-opt')].map((b) => b.dataset.value);
+  assert.deepEqual(opts, ['none', 'narrow', 'normal', 'wide']);
+  assert.ok(control.querySelector('.skim-export-toggle'), 'the export button is still there');
+
+  control.querySelector('[data-value="none"]').click();
+  assert.equal(document.documentElement.getAttribute('data-skim-print-margin'), 'none');
+  assert.equal(stored.printMargin, 'none', 'persisted, so the popup agrees');
+  assert.ok(control.querySelector('[data-value="none"]').classList.contains('active'));
+
+  // An external change (popup, other tab) resyncs the marks without a rebind.
+  applyPrintMargin('wide');
+  control.skimSync();
+  assert.ok(control.querySelector('[data-value="wide"]').classList.contains('active'));
+  assert.ok(!control.querySelector('[data-value="none"]').classList.contains('active'));
+});
+
+test('print export wraps the body in gutter rows + a zero page margin, then unwraps', () => {
+  const article = document.createElement('article');
+  article.className = 'skim markdown-body';
+  article.innerHTML = '<h2 id="a">A</h2><p>body</p><h2 id="b">B</h2>';
+  document.title = 'Doc';                     // gives the cover page content
+  const main = document.createElement('main');
+  main.className = 'skim-main';
+  const raw = document.createElement('pre');
+  raw.className = 'skim-raw';
+  main.append(article, raw);
+  document.body.append(main);
+
+  let during = null;
+  const origPrint = window.print;
+  window.print = () => {
+    const table = main.querySelector('table.skim-print-page');
+    during = {
+      // Cover outside the table (own page), everything else inside the cell.
+      coverOutside: main.firstElementChild.className === 'skim-print-cover',
+      gutters: table.querySelectorAll(':scope > thead td.skim-print-gutter, :scope > tfoot td.skim-print-gutter').length,
+      cellChildren: [...table.querySelector('td.skim-print-cell').children].map((n) => n.className),
+      pageRule: document.querySelector('style.skim-print-page-style')?.textContent,
+    };
+    window.dispatchEvent(new window.Event('afterprint'));
+  };
+  try {
+    setupPrintExport(article, [
+      { level: 2, text: 'A', id: 'a', html: 'A' },
+      { level: 2, text: 'B', id: 'b', html: 'B' },
+    ]).querySelector('.skim-export-toggle').click();
+  } finally {
+    window.print = origPrint;
+  }
+
+  assert.equal(during.coverOutside, true);
+  assert.equal(during.gutters, 2, 'a repeating top and bottom gutter row');
+  assert.deepEqual(during.cellChildren, ['skim markdown-body', 'skim-raw']);
+  assert.match(during.pageRule, /@page\s*\{\s*margin:\s*0;\s*\}/);
+
+  assert.equal(main.querySelector('table.skim-print-page'), null, 'wrapper removed');
+  assert.equal(document.querySelector('style.skim-print-page-style'), null, '@page override removed');
+  assert.deepEqual([...main.children].map((n) => n.className), ['skim markdown-body', 'skim-raw'],
+    'original children restored in order');
+  main.remove();
+});
+
 test('buildCopySourceButton returns a button that copies source via clipboard on click', async () => {
   const { buildCopySourceButton } = await import('../src/ui.js');
   const sourceText = '# My Document\n\nSome content here.';
@@ -904,8 +1272,46 @@ test('setupBlockNavigation().refresh() resyncs to new blocks after innerHTML rep
   article.innerHTML = '<p>one</p><p>two</p><p>three</p>';
   doc.body.append(article);
 
-  const nav = setupBlockNavigation(article);
+  // The scroller is injected so the keys can be checked without a real layout.
+  const moves = [];
+  const scroller = { by: (d) => moves.push(['by', d]), to: (y) => moves.push(['to', y]) };
+  const nav = setupBlockNavigation(article, { scroller });
   const staleBlocks = Array.from(article.children);
+
+  const press = (key, init = {}) => document.dispatchEvent(
+    new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
+  );
+
+  press('j');
+  press('k');
+  assert.equal(moves.length, 2);
+  assert.ok(moves[0][1] > 0, 'j scrolls one rendered line down');
+  assert.ok(moves[1][1] < 0, 'k scrolls one rendered line up');
+  assert.equal(moves[0][1], -moves[1][1], 'j/k steps are symmetric');
+  assert.deepEqual(moves.map((m) => m[0]), ['by', 'by'], 'j/k ease rather than jump');
+
+  press('j', { ctrlKey: true });
+  const input = doc.createElement('input');
+  doc.body.append(input);
+  input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k', bubbles: true, cancelable: true }));
+  assert.equal(moves.length, 2, 'modifiers and typing targets are not hijacked');
+  input.remove();
+
+  // G jumps to the end, gg to the start, and a lone g does nothing on its own.
+  moves.length = 0;
+  press('G', { shiftKey: true });
+  assert.deepEqual(moves.map((m) => m[0]), ['to'], 'G scrolls to the end');
+  moves.length = 0;
+  press('g');
+  assert.equal(moves.length, 0, 'a single g waits for its partner');
+  press('g');
+  assert.deepEqual(moves, [['to', 0]], 'gg scrolls to the top');
+  moves.length = 0;
+  press('g');
+  press('j');
+  press('g');
+  assert.deepEqual(moves.map((m) => m[0]), ['by'], 'j between the two g keys cancels the pair');
+  moves.length = 0;
 
   // Before any reload: Tab lands on one of the original blocks. jsdom's
   // getBoundingClientRect always returns zeros, so setupBlockNavigation's
@@ -1126,4 +1532,147 @@ test('mermaid: a fence between headings keeps both headings and its source', () 
   const heads = collectHeadings(el);
   assert.deepEqual(heads.map((h) => h.text), ['One', 'Two']);
   assert.match(html, /class="language-mermaid"/);
+});
+
+// --- file access detection ---------------------------------------------
+
+const { isFileAccessAllowed } = await import('../src/file-access-check.js');
+
+test('file access: the API saying yes is taken at its word, no probe needed', async () => {
+  let probed = false;
+  const allowed = await isFileAccessAllowed({
+    api: async () => true,
+    probe: async () => { probed = true; return false; },
+  });
+  assert.equal(allowed, true);
+  assert.equal(probed, false);
+});
+
+test('file access: a readable file:// URL overrules an API that says no', async () => {
+  // The bug this guards: chrome.extension is missing (service worker) or
+  // answers false, and the reader gets nagged to flip a switch already on.
+  assert.equal(await isFileAccessAllowed({ api: async () => false, probe: async () => true }), true);
+  assert.equal(await isFileAccessAllowed({ api: null, probe: async () => true }), true);
+  assert.equal(
+    await isFileAccessAllowed({ api: async () => { throw new Error('not a function'); }, probe: async () => true }),
+    true
+  );
+});
+
+test('file access: only nags when both the API and the probe say no', async () => {
+  assert.equal(await isFileAccessAllowed({ api: async () => false, probe: async () => false }), false);
+});
+
+// --- orphaned inline content (display math splits its paragraph) --------
+
+const { wrapOrphanInlines } = await import('../src/normalize.js');
+
+test('normalize: inline leftovers after a display-math div become a paragraph', () => {
+  const article = document.createElement('article');
+  // Exactly what the parser produces for "text $$D$$ more $R^2$ text": the div
+  // closes the <p>, and everything after it lands straight on the article.
+  article.innerHTML = '<p>before</p><div class="skim-math skim-math-display">D</div>'
+    + 'the use of <span class="skim-math skim-math-inline">R^2</span> for selection';
+  wrapOrphanInlines(article);
+  const kinds = Array.from(article.children).map((c) => c.tagName);
+  assert.deepEqual(kinds, ['P', 'DIV', 'P']);
+  assert.equal(article.children[2].textContent, 'the use of R^2 for selection');
+});
+
+test('normalize: whitespace between blocks does not become an empty paragraph', () => {
+  const article = document.createElement('article');
+  article.innerHTML = '<p>one</p>\n  \n<p>two</p>\n';
+  wrapOrphanInlines(article);
+  assert.equal(article.children.length, 2);
+});
+
+test('normalize: a document of well-formed blocks is left untouched', () => {
+  const article = document.createElement('article');
+  const html = '<h1>Title</h1><p>body</p><ul><li>item</li></ul>';
+  article.innerHTML = html;
+  wrapOrphanInlines(article);
+  assert.equal(article.innerHTML, html);
+});
+
+test('nav: inline leftovers are never navigable blocks', async () => {
+  const { getBlocks } = await import('../src/nav.js');
+  const article = document.createElement('article');
+  article.innerHTML = '<p>para</p><span class="skim-math skim-math-inline">R^2</span>'
+    + '<div class="skim-math skim-math-display">D</div>';
+  const tags = getBlocks(article).map((b) => b.tagName);
+  assert.deepEqual(tags, ['P', 'DIV']);
+});
+
+// --- smooth scrolling (j/k, G, gg) --------------------------------------
+
+const { createSmoothScroller } = await import('../src/smooth-scroll.js');
+
+// Drive the scroller with a fake clock and rAF so the easing is deterministic.
+function fakeScroller({ height = 10000, viewport = 800 } = {}) {
+  let y = 0;
+  let t = 0;
+  const queue = [];
+  const s = createSmoothScroller({
+    getY: () => Math.round(y),
+    setY: (next) => { y = next; },
+    maxY: () => height - viewport,
+    raf: (cb) => queue.push(cb),
+    now: () => t,
+  });
+  return {
+    scroller: s,
+    y: () => y,
+    // Run frames at 60Hz until the animation settles (or we give up).
+    run(frames = 200) {
+      for (let i = 0; i < frames && queue.length; i++) {
+        const cb = queue.shift();
+        t += 16.7;
+        cb(t);
+      }
+    },
+  };
+}
+
+test('smooth scroll: a step eases to exactly the requested distance', () => {
+  const f = fakeScroller();
+  f.scroller.by(120);
+  assert.equal(f.y(), 0, 'nothing moves until the first frame');
+  f.run();
+  assert.equal(f.y(), 120);
+  assert.equal(f.scroller.animating, false);
+});
+
+test('smooth scroll: presses while gliding accumulate instead of restarting', () => {
+  const f = fakeScroller();
+  f.scroller.by(100);
+  f.run(2);
+  const mid = f.y();
+  assert.ok(mid > 0 && mid < 100, 'partway through the first step');
+  f.scroller.by(100); // key repeat lands mid-flight
+  f.run();
+  assert.equal(f.y(), 200);
+});
+
+test('smooth scroll: G and gg targets clamp to the document', () => {
+  const f = fakeScroller({ height: 10000, viewport: 800 });
+  f.scroller.to(1e9);
+  f.run();
+  assert.equal(f.y(), 9200);
+  f.scroller.to(-1e9);
+  f.run();
+  assert.equal(f.y(), 0);
+});
+
+test('smooth scroll: scrolling by other means mid-glide carries the remainder over', () => {
+  const f = fakeScroller();
+  f.scroller.by(1000);
+  f.run(1);
+  const afterFirst = f.y();
+  const remaining = 1000 - afterFirst;
+  f.scroller.by(0); // no-op press, keeps the target where it is
+  // The reader flicks the wheel: jump the page somewhere else entirely.
+  const jumped = 5000;
+  f.scroller.to(jumped + remaining); // what the resync should converge on
+  f.run();
+  assert.equal(Math.round(f.y()), jumped + Math.round(remaining));
 });
