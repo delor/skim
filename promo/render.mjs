@@ -14,8 +14,13 @@ await mkdir(outDir, { recursive: true });
 const files = (await readdir(srcDir)).filter((f) => f.endsWith('.svg')).sort();
 for (const file of files) {
   const svg = await readFile(join(srcDir, file), 'utf8');
+  // Each SVG declares its own size (store screenshots are 1280x800; promo
+  // tiles and the Shorts backdrop differ). Render at exactly that size.
+  const m = svg.match(/<svg[^>]*\bwidth="(\d+)"[^>]*\bheight="(\d+)"/);
+  if (!m) throw new Error(`${file}: missing width/height on <svg>`);
+  const [width, height] = [Number(m[1]), Number(m[2])];
   const resvg = new Resvg(svg, {
-    fitTo: { mode: 'width', value: 1280 },
+    fitTo: { mode: 'width', value: width },
     font: {
       loadSystemFonts: true,
       defaultFontFamily: 'Inter',
@@ -25,8 +30,8 @@ for (const file of files) {
     },
   });
   const png = resvg.render();
-  if (png.width !== 1280 || png.height !== 800) {
-    throw new Error(`${file}: unexpected size ${png.width}x${png.height}`);
+  if (png.width !== width || png.height !== height) {
+    throw new Error(`${file}: unexpected size ${png.width}x${png.height}, wanted ${width}x${height}`);
   }
   const out = join(outDir, file.replace(/\.svg$/, '.png'));
   await writeFile(out, png.asPng());

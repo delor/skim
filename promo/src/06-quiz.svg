@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5674dd"/>
+      <stop offset="1" stop-color="#8aabff"/>
+    </linearGradient>
+    <filter id="winshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#0d1017" flood-opacity="0.38"/>
+    </filter>
+    <marker id="arrowY" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="4.6" markerHeight="4.6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ffd866"/>
+    </marker>
+    <clipPath id="winclip"><rect x="64" y="176" width="1152" height="644" rx="12"/></clipPath>
+    <g id="skimicon">
+      <rect width="24" height="24" rx="5.5" fill="#0d1017" stroke="#2c3344" stroke-width="1"/>
+      <rect x="4.5" y="6.2" width="15" height="2.1" rx="1.05" fill="#e8eaf0"/>
+      <rect x="4.5" y="10.9" width="10.5" height="2.1" rx="1.05" fill="#7aa2ff"/>
+      <rect x="4.5" y="15.6" width="6.4" height="2.1" rx="1.05" fill="#4a5164"/>
+      <circle cx="18.4" cy="16.7" r="1.4" fill="#ffd866"/>
+    </g>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="url(#bg)"/>
+
+  <!-- Headline -->
+  <text x="640" y="102" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="44" font-weight="700" fill="#ffffff" letter-spacing="-0.5">A quiz inside. Invisible outside.</text>
+
+  <!-- Window shadow backing -->
+  <rect x="64" y="176" width="1152" height="644" rx="12" fill="#15151a" filter="url(#winshadow)"/>
+
+  <!-- Window -->
+  <g clip-path="url(#winclip)">
+    <rect x="64" y="176" width="1152" height="644" fill="#15151a"/>
+    <!-- Browser chrome bar -->
+    <rect x="64" y="176" width="1152" height="52" fill="#0b0e14"/>
+    <line x1="64" y1="228" x2="1216" y2="228" stroke="#232838" stroke-width="1"/>
+    <use xlink:href="#skimicon" x="88" y="190"/>
+    <rect x="124" y="188" width="430" height="28" rx="14" fill="#161b26"/>
+    <text x="142" y="207" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="13" fill="#9aa3b8">file:///home/nir/notes/linear-algebra.md</text>
+    <g fill="#4a5164">
+      <circle cx="1186" cy="196" r="2.2"/><circle cx="1186" cy="203" r="2.2"/><circle cx="1186" cy="210" r="2.2"/>
+    </g>
+
+    <!-- ===== Document column (right) ===== -->
+    <!-- H1 bar -->
+    <rect x="716" y="266" width="216" height="36" rx="3" fill="#6b6be4"/>
+    <text x="734" y="291" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="600" fill="#f4f2b0">Linear Algebra Notes</text>
+
+    <!-- Ghost prose -->
+    <g fill="#333340">
+      <rect x="716" y="336" width="460" height="13" rx="6.5"/>
+      <rect x="716" y="362" width="430" height="13" rx="6.5"/>
+      <rect x="716" y="388" width="452" height="13" rx="6.5"/>
+    </g>
+
+    <!-- Section heading -->
+    <text x="716" y="446" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700"><tspan fill="#7e7e86">## </tspan><tspan fill="#4ab8f5">Norms</tspan></text>
+    <g fill="#333340">
+      <rect x="716" y="470" width="452" height="13" rx="6.5"/>
+      <rect x="716" y="496" width="410" height="13" rx="6.5"/>
+    </g>
+
+    <!-- The invisible comment, made visible as the story -->
+    <rect x="716" y="540" width="300" height="34" rx="6" fill="#1f1f26" stroke="#2c3344" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="734" y="562" font-family="DejaVu Sans Mono, monospace" font-size="14" fill="#7e7e86">&lt;!-- SKIM-QUIZ ... --&gt;</text>
+    <text x="716" y="600" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#56565e" font-style="italic">invisible in every other viewer</text>
+
+    <g fill="#333340">
+      <rect x="716" y="636" width="460" height="13" rx="6.5"/>
+      <rect x="716" y="662" width="380" height="13" rx="6.5"/>
+      <rect x="716" y="688" width="440" height="13" rx="6.5"/>
+      <rect x="716" y="714" width="300" height="13" rx="6.5"/>
+    </g>
+
+    <!-- ===== Quiz pane (left) ===== -->
+    <rect x="64" y="228" width="600" height="592" fill="#1f1f26"/>
+    <!-- divider + grip -->
+    <line x1="664" y1="228" x2="664" y2="820" stroke="#2c3344" stroke-width="2"/>
+    <g fill="#4a5164">
+      <circle cx="664" cy="500" r="2.4"/><circle cx="664" cy="512" r="2.4"/><circle cx="664" cy="524" r="2.4"/>
+    </g>
+
+    <!-- Quiz header -->
+    <text x="100" y="278" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="700" fill="#4ab8f5">Linear algebra drill</text>
+    <text x="100" y="300" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="12" fill="#7e7e86">2/5 answered</text>
+    <!-- fullscreen + close icons -->
+    <g stroke="#4a5164" stroke-width="1.6" fill="none">
+      <rect x="561" y="258" width="26" height="26" rx="6"/>
+      <rect x="597" y="258" width="26" height="26" rx="6"/>
+      <path d="M568 272 h12 M568 268 v-3 h4 M584 275 v3 h-4"/>
+      <path d="M604 265 l12 12 M616 265 l-12 12"/>
+    </g>
+
+    <!-- Palette chips -->
+    <g font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="13" text-anchor="middle">
+      <rect x="100" y="322" width="32" height="30" rx="6" fill="#6b6be4" opacity="0.32"/>
+      <rect x="100" y="322" width="32" height="30" rx="6" fill="none" stroke="#6b6be4" stroke-width="1.4"/>
+      <text x="116" y="342" fill="#e8eaf0">1</text>
+      <rect x="140" y="322" width="32" height="30" rx="6" fill="#6b6be4" opacity="0.32"/>
+      <rect x="140" y="322" width="32" height="30" rx="6" fill="none" stroke="#6b6be4" stroke-width="1.4"/>
+      <text x="156" y="342" fill="#e8eaf0">2</text>
+      <rect x="180" y="322" width="32" height="30" rx="6" fill="none" stroke="#6b6be4" stroke-width="2.2"/>
+      <text x="196" y="342" fill="#e8eaf0">3</text>
+      <rect x="220" y="322" width="32" height="30" rx="6" fill="none" stroke="#56565e" stroke-width="1.4"/>
+      <text x="236" y="342" fill="#7e7e86">4</text>
+      <rect x="260" y="322" width="32" height="30" rx="6" fill="none" stroke="#56565e" stroke-width="1.4"/>
+      <text x="276" y="342" fill="#7e7e86">5</text>
+    </g>
+    <line x1="64" y1="372" x2="664" y2="372" stroke="#2c3344" stroke-width="1"/>
+
+    <!-- Question -->
+    <text x="100" y="404" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="11" fill="#7e7e86" letter-spacing="1.5">QUESTION 3 OF 5</text>
+    <text x="100" y="436" font-family="Inter, system-ui, sans-serif" font-size="19" fill="#cfcfd4">Which of these is <tspan font-style="italic">not</tspan> a norm?</text>
+
+    <!-- Choices -->
+    <!-- choice 1 -->
+    <rect x="100" y="460" width="500" height="46" rx="9" fill="#2c2c34" stroke="#3a3a44" stroke-width="1"/>
+    <rect x="114" y="472" width="22" height="22" rx="5" fill="none" stroke="#56565e" stroke-width="1.4"/>
+    <text x="121" y="488" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="12" fill="#7e7e86">1</text>
+    <g font-family="DejaVu Serif, Georgia, serif" fill="#cfcfd4">
+      <text x="150" y="489" font-size="19">&#8214;</text>
+      <text x="163" y="489" font-size="19" font-style="italic">x</text>
+      <text x="174" y="489" font-size="19">&#8214;</text>
+      <text x="184" y="495" font-size="13">1</text>
+      <text x="203" y="489" font-size="19">=</text>
+      <text x="224" y="489" font-size="19">|</text>
+      <text x="231" y="489" font-size="19" font-style="italic">x</text>
+      <text x="242" y="495" font-size="13">1</text>
+      <text x="251" y="489" font-size="19">|</text>
+      <text x="266" y="489" font-size="19">+</text>
+      <text x="287" y="489" font-size="19">|</text>
+      <text x="294" y="489" font-size="19" font-style="italic">x</text>
+      <text x="305" y="495" font-size="13">2</text>
+      <text x="314" y="489" font-size="19">|</text>
+    </g>
+
+    <!-- choice 2, selected -->
+    <rect x="100" y="516" width="500" height="46" rx="9" fill="#6b6be4" opacity="0.16"/>
+    <rect x="100" y="516" width="500" height="46" rx="9" fill="none" stroke="#6b6be4" stroke-width="1.8"/>
+    <rect x="114" y="528" width="22" height="22" rx="5" fill="#6b6be4"/>
+    <text x="121" y="544" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="12" fill="#f4f2b0">2</text>
+    <g font-family="DejaVu Serif, Georgia, serif" fill="#e8eaf0">
+      <text x="150" y="545" font-size="19" font-style="italic">f</text>
+      <text x="161" y="545" font-size="19">(</text>
+      <text x="169" y="545" font-size="19" font-style="italic">x</text>
+      <text x="180" y="545" font-size="19">)</text>
+      <text x="196" y="545" font-size="19">=</text>
+      <text x="217" y="545" font-size="19" font-style="italic">x</text>
+      <text x="228" y="551" font-size="13">1</text>
+      <text x="228" y="537" font-size="13">2</text>
+      <text x="245" y="545" font-size="19">+</text>
+      <text x="266" y="545" font-size="19" font-style="italic">x</text>
+      <text x="277" y="551" font-size="13">2</text>
+      <text x="277" y="537" font-size="13">2</text>
+    </g>
+
+    <!-- choice 3 -->
+    <rect x="100" y="572" width="500" height="46" rx="9" fill="#2c2c34" stroke="#3a3a44" stroke-width="1"/>
+    <rect x="114" y="584" width="22" height="22" rx="5" fill="none" stroke="#56565e" stroke-width="1.4"/>
+    <text x="121" y="600" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="12" fill="#7e7e86">3</text>
+    <g font-family="DejaVu Serif, Georgia, serif" fill="#cfcfd4">
+      <text x="150" y="601" font-size="19">&#8214;</text>
+      <text x="163" y="601" font-size="19" font-style="italic">x</text>
+      <text x="174" y="601" font-size="19">&#8214;</text>
+      <text x="184" y="607" font-size="14">&#8734;</text>
+      <text x="209" y="601" font-size="19">=</text>
+      <text x="230" y="601" font-size="19">max</text>
+      <text x="270" y="601" font-size="19">(</text>
+      <text x="278" y="601" font-size="19">|</text>
+      <text x="285" y="601" font-size="19" font-style="italic">x</text>
+      <text x="296" y="607" font-size="13">1</text>
+      <text x="305" y="601" font-size="19">|</text>
+      <text x="312" y="601" font-size="19">,</text>
+      <text x="322" y="601" font-size="19">|</text>
+      <text x="329" y="601" font-size="19" font-style="italic">x</text>
+      <text x="340" y="607" font-size="13">2</text>
+      <text x="349" y="601" font-size="19">|</text>
+      <text x="356" y="601" font-size="19">)</text>
+    </g>
+
+    <!-- Hint -->
+    <rect x="100" y="644" width="4" height="40" rx="2" fill="#6b6be4"/>
+    <rect x="104" y="644" width="420" height="40" rx="4" fill="#6b6be4" opacity="0.08"/>
+    <text x="122" y="669" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#9aa3b8">Check homogeneity: does</text>
+    <g font-family="DejaVu Serif, Georgia, serif" font-size="15" fill="#9aa3b8">
+      <text x="305" y="669" font-style="italic">f</text>
+      <text x="314" y="669">(2</text>
+      <text x="332" y="669" font-style="italic">x</text>
+      <text x="341" y="669">)</text>
+      <text x="353" y="669">=</text>
+      <text x="370" y="669">2</text>
+      <text x="380" y="669" font-style="italic">f</text>
+      <text x="389" y="669">(</text>
+      <text x="396" y="669" font-style="italic">x</text>
+      <text x="405" y="669">)</text>
+      <text x="412" y="669">?</text>
+    </g>
+
+    <!-- Footer -->
+    <line x1="64" y1="724" x2="664" y2="724" stroke="#2c3344" stroke-width="1"/>
+    <g font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="13">
+      <rect x="100" y="748" width="74" height="34" rx="7" fill="#2c2c34" stroke="#3a3a44" stroke-width="1"/>
+      <text x="118" y="770" fill="#cfcfd4">&#8249; Prev</text>
+      <rect x="184" y="748" width="74" height="34" rx="7" fill="#2c2c34" stroke="#3a3a44" stroke-width="1"/>
+      <text x="200" y="770" fill="#cfcfd4">Next &#8250;</text>
+      <rect x="500" y="748" width="100" height="34" rx="7" fill="#6b6be4"/>
+      <text x="527" y="770" fill="#f4f2b0">Submit</text>
+    </g>
+  </g>
+
+  <!-- Yellow accent arrow: hidden comment -> quiz pane -->
+  <path d="M 730 528 C 700 470, 700 430, 672 408" fill="none" stroke="#ffd866" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowY)"/>
+</svg>

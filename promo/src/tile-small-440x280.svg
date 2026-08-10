@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="440" height="280" viewBox="0 0 440 280">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5674dd"/>
+      <stop offset="1" stop-color="#8aabff"/>
+    </linearGradient>
+    <filter id="iconshadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="5" stdDeviation="9" flood-color="#0d1017" flood-opacity="0.35"/>
+    </filter>
+    <g id="skimicon">
+      <rect width="24" height="24" rx="5.5" fill="#0d1017" stroke="#2c3344" stroke-width="1"/>
+      <rect x="4.5" y="6.2" width="15" height="2.1" rx="1.05" fill="#e8eaf0"/>
+      <rect x="4.5" y="10.9" width="10.5" height="2.1" rx="1.05" fill="#7aa2ff"/>
+      <rect x="4.5" y="15.6" width="6.4" height="2.1" rx="1.05" fill="#4a5164"/>
+      <circle cx="18.4" cy="16.7" r="1.4" fill="#ffd866"/>
+    </g>
+  </defs>
+
+  <rect width="440" height="280" fill="url(#bg)"/>
+
+  <!-- icon + wordmark, optically centered -->
+  <g filter="url(#iconshadow)" transform="translate(126 82) scale(2.9)">
+    <use xlink:href="#skimicon"/>
+  </g>
+  <text x="210" y="136" font-family="Inter, system-ui, sans-serif" font-size="58" font-weight="700" fill="#ffffff" letter-spacing="-1">Skim</text>
+
+  <text x="220" y="196" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="19" fill="#eef2ff">Markdown, beautifully.</text>
+  <text x="220" y="230" text-anchor="middle" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="13" fill="#dbe4ff" opacity="0.85">free &#183; open source &#183; offline</text>
+</svg>
