@@ -235,8 +235,9 @@ function render(detected, settings) {
   // windows).
   refreshBreakouts(article);
 
-  // Copying a selection yields the equivalent Markdown source.
-  setupMarkdownCopy(article);
+  // Copying a selection yields the equivalent Markdown source; select-all
+  // copies the raw source itself (never the toolbar/TOC chrome).
+  setupMarkdownCopy(article, () => currentSource);
 
   // Tab / Shift+Tab block navigation (now that the article is in the document).
   // Keep the handle: auto-reload replaces article.innerHTML, which detaches

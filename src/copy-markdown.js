@@ -63,10 +63,36 @@ export function htmlToMarkdown(html) {
 }
 
 // Intercept copy within `article` and replace the clipboard text with Markdown.
-export function setupMarkdownCopy(article) {
+export function setupMarkdownCopy(article, getSource) {
   document.addEventListener('copy', (e) => {
     const sel = window.getSelection && window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+
+    // Select-all (browser Ctrl+A anchors at <body>; ours selects the article
+    // node): the whole document is selected, so the faithful clipboard payload
+    // is the raw markdown source, never the toolbar/TOC chrome around it.
+    // Boundary-point comparison, not containsNode: Chrome reports a range that
+    // sits exactly on the node's own boundaries as "not fully containing" it.
+    let coversArticle = false;
+    try {
+      const contents = document.createRange();
+      contents.selectNodeContents(article);
+      for (let i = 0; i < sel.rangeCount; i++) {
+        const r = sel.getRangeAt(i);
+        if (r.compareBoundaryPoints(Range.START_TO_START, contents) <= 0
+          && r.compareBoundaryPoints(Range.END_TO_END, contents) >= 0) {
+          coversArticle = true;
+          break;
+        }
+      }
+    } catch { /* detached/foreign nodes */ }
+    if (coversArticle && e.clipboardData) {
+      const source = typeof getSource === 'function' ? getSource() : null;
+      e.clipboardData.setData('text/plain', source ?? htmlToMarkdown(article.innerHTML));
+      e.preventDefault();
+      return;
+    }
+
     // Only handle selections that live inside the rendered article.
     if (!article.contains(sel.anchorNode) && !article.contains(sel.focusNode)) return;
 
@@ -77,6 +103,26 @@ export function setupMarkdownCopy(article) {
     const md = htmlToMarkdown(container.innerHTML);
     if (!md || !e.clipboardData) return;
     e.clipboardData.setData('text/plain', md);
+    e.preventDefault();
+  });
+
+  // Ctrl/Cmd+A selects the document, not the viewer chrome: the rendered
+  // article (or the raw-source view when it is the one showing). Inputs and
+  // editable fields keep their native select-all.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'a' || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    // The raw view hides via CSS, not the hidden attribute — ask the style.
+    const raw = document.querySelector('.skim-raw');
+    const rawVisible = raw && getComputedStyle(raw).display !== 'none';
+    const target = rawVisible ? raw : article;
+    const sel = window.getSelection && window.getSelection();
+    if (!sel) return;
+    const range = document.createRange();
+    range.selectNode(target);
+    sel.removeAllRanges();
+    sel.addRange(range);
     e.preventDefault();
   });
 }
