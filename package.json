@@ -1,6 +1,6 @@
 {
   "name": "skim",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "description": "Skim — markdown viewer browser extension",
   "scripts": {

@@ -4,6 +4,7 @@
 //   3. Emoji presentation — normalize text-default dingbats to color emoji.
 // Each pass walks text nodes, skipping code, existing math, and our own output.
 import katex from 'katex';
+import { strongDirOfChar, effectiveDir } from './bidi.js';
 
 // --- shared text walking ----------------------------------------------
 const SKIP_TAGS = new Set(['PRE', 'CODE', 'SCRIPT', 'STYLE', 'TEXTAREA']);
@@ -30,7 +31,7 @@ function eligibleTextNodes(root) {
 }
 
 // Replace every match of the global `regex` in eligible text nodes with the
-// element returned by make(matchText).
+// element returned by make(matchText, node, matchIndex).
 export function replaceInTextNodes(root, regex, make) {
   for (const node of eligibleTextNodes(root)) {
     const text = node.nodeValue;
@@ -41,7 +42,7 @@ export function replaceInTextNodes(root, regex, make) {
     let last = 0; let m;
     while ((m = regex.exec(text))) {
       if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-      frag.appendChild(make(m[0]));
+      frag.appendChild(make(m[0], node, m.index));
       last = m.index + m[0].length;
       if (m[0].length === 0) regex.lastIndex++;
     }
@@ -78,26 +79,55 @@ export const SYMBOLS = {
 };
 const SYMBOL_RUN = new RegExp('[' + Object.keys(SYMBOLS).join('') + ']', 'g');
 
+// Unicode does not bidi-mirror arrows, so in RTL flow `רציפה ⇒ סגורה` renders
+// with the arrow pointing at the antecedent instead of the consequent. When an
+// arrow sits in RTL flow, render the mirrored glyph so it keeps pointing at
+// its logical target. Only rightward arrows mirror: an author who typed ⇐
+// inside Hebrew text already chose the visual direction they wanted.
+const RTL_MIRROR = { '⇒': '\\Leftarrow', '→': '\\leftarrow' };
+
+// Nearest strong direction scanning from `start` by `step` within one text
+// node. Digits count as RTL here: the bidi algorithm resolves a neutral
+// between a number and RTL text to the paragraph direction (UAX#9 N1/N2).
+function sideStrongDir(text, start, step) {
+  for (let k = start; k >= 0 && k < text.length; k += step) {
+    const d = strongDirOfChar(text[k]);
+    if (d) return d;
+    if (/[0-9]/.test(text[k])) return 'rtl';
+  }
+  return null;
+}
+
+// An arrow flows RTL unless both of its nearest strong neighbors are LTR
+// (then the bidi algorithm keeps the whole fragment LTR, e.g. `A ⇒ B`).
+function flowsRtl(node, index) {
+  if (effectiveDir(node.parentElement) !== 'rtl') return false;
+  const before = sideStrongDir(node.nodeValue, index - 1, -1);
+  const after = sideStrongDir(node.nodeValue, index + 1, +1);
+  return !(before === 'ltr' && after === 'ltr');
+}
+
 const symbolCache = new Map();
-function renderSymbol(ch) {
-  if (!symbolCache.has(ch)) {
+function renderSymbol(latex, fallback) {
+  if (!symbolCache.has(latex)) {
     let html;
     try {
-      html = katex.renderToString(SYMBOLS[ch], { throwOnError: false, output: 'htmlAndMathml' });
+      html = katex.renderToString(latex, { throwOnError: false, output: 'htmlAndMathml' });
     } catch {
-      html = ch;
+      html = fallback;
     }
-    symbolCache.set(ch, html);
+    symbolCache.set(latex, html);
   }
-  return symbolCache.get(ch);
+  return symbolCache.get(latex);
 }
 
 export function decorateSymbols(root) {
-  replaceInTextNodes(root, SYMBOL_RUN, (ch) => {
+  replaceInTextNodes(root, SYMBOL_RUN, (ch, node, index) => {
+    const latex = RTL_MIRROR[ch] && flowsRtl(node, index) ? RTL_MIRROR[ch] : SYMBOLS[ch];
     const span = document.createElement('span');
     span.className = 'skim-sym';
     span.dataset.sym = ch;            // original char, for copy-as-Markdown
-    span.innerHTML = renderSymbol(ch);
+    span.innerHTML = renderSymbol(latex, ch);
     return span;
   });
 }

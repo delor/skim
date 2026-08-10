@@ -17,6 +17,8 @@ import { renderMermaidBlocks } from './mermaid.js';
 import { setupLightbox } from './lightbox.js';
 import { applyBidi } from './bidi.js';
 import { wrapOrphanInlines } from './normalize.js';
+import { parseQuizzes } from './quiz.js';
+import { buildQuizControl } from './quiz-ui.js';
 import {
   collectHeadings,
   buildToc,
@@ -199,6 +201,11 @@ function render(detected, settings) {
   populateArticle(article, body, settings);
   if (fields) article.before(buildFrontmatterCard(fields));
 
+  // Quizzes embedded per SKIM-QUIZ-PROTOCOL.md. The control renders nothing
+  // when the document has none.
+  const quizzes = parseQuizzes(body);
+  const quizControl = quizzes.length ? buildQuizControl({ quizzes, container, article }) : null;
+
   const headings = collectHeadings(article);
 
   // Build UI pieces (need headings from the now-populated article).
@@ -219,7 +226,7 @@ function render(detected, settings) {
     container.prepend(toc);
   }
   main.append(rawPre);
-  const toolbar = buildToolbar([themeToggle, paletteControl, paddingControl, zenControl, exportControl, exportHtmlButton, copySourceButton, viewToggle, folderButton].filter(Boolean));
+  const toolbar = buildToolbar([themeToggle, paletteControl, paddingControl, zenControl, exportControl, exportHtmlButton, copySourceButton, viewToggle, folderButton, quizControl].filter(Boolean));
   document.body.append(toolbar);
 
   // populateArticle sized table breakouts before the TOC existed, i.e. against
@@ -277,6 +284,7 @@ function render(detected, settings) {
         const { fields: freshFields, body: freshBody } = extractFrontmatter(text);
         document.querySelector('.skim-frontmatter')?.remove();
         populateArticle(article, freshBody, settings);
+        quizControl?.skimQuizUpdate(parseQuizzes(freshBody));
         if (freshFields) article.before(buildFrontmatterCard(freshFields));
         nav.refresh();
         const freshHeadings = collectHeadings(article);

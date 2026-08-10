@@ -50,7 +50,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           zip -r "skim-${VERSION}.zip" \
-            manifest.json src dist vendor assets _locales examples LICENSE \
+            manifest.json SKIM-QUIZ-PROTOCOL.md src dist vendor assets _locales examples LICENSE \
             -x '*/.DS_Store'
           ls -lh "skim-${VERSION}.zip"
 

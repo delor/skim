@@ -1,3 +1,325 @@
-.skim-folder-banner { font: 13px system-ui, sans-serif; background: #131a2b; color: #cfd6e4; border: 1px solid #2c3344; border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
-.skim-md-link { font-weight: 700; }
-.skim-md-link::after { content: " ◂ markdown"; font-size: 11px; color: #7aa2ff; }
+/* Skim folder view — styles for the directory-listing takeover (folder.js).
+   Injected on every file:// page, so every rule is gated on
+   html[data-skim-folder="1"] (set by folder.js only on real listings) or on
+   .skim-folder-* classes that exist nowhere else.
+
+   Design: the viewer's Glow glamour, in `ls` clothes. Everything is set in
+   Skim Mono (a listing is data, not prose), colors come from skim.css's token
+   system (folder.js sets data-skim-md so all dark/light + scheme palettes
+   apply), and the signature is the breadcrumb path drawn as the viewer's
+   lavender H1 bar: your location is the page's H1. */
+
+/* Fallback tokens: skim.css is attached at runtime as a <link>; these cover
+   the tick before it loads (and tests). Lower specificity (0,1,1) than
+   skim.css's :root[data-skim-md="1"] (0,2,0), so the real palettes win. */
+html[data-skim-folder="1"] {
+  --skim-bg: #15151a;
+  --skim-fg: #cfcfd4;
+  --skim-heading: #4ab8f5;
+  --skim-h1-fg: #f4f2b0;
+  --skim-h1-bg: #6b6be4;
+  --skim-link-text: #4fb886;
+  --skim-muted: #7e7e86;
+  --skim-code-bg: #2c2c34;
+  --skim-panel: #1f1f26;
+  --skim-border: #3a3a44;
+  --mono: "Skim Mono", "Skim Hebrew", ui-monospace, "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+  background: var(--skim-bg);
+  color-scheme: dark;
+}
+html[data-skim-folder="1"][data-theme="light"] { color-scheme: light; }
+html[data-skim-folder="1"] body {
+  margin: 0;
+  background: var(--skim-bg);
+}
+/* Chrome's own listing stays in the DOM (its late inline scripts still need
+   #tbody etc.) but is invisible once our page has mounted. */
+html[data-skim-folder="1"] body > :not(.skim-folder) { display: none !important; }
+
+.skim-folder {
+  max-width: 52rem;              /* the viewer's reading column */
+  margin: 0 auto;
+  padding: 2.2rem 2rem 5rem;
+  box-sizing: border-box;
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--skim-fg);
+}
+
+/* Header ---------------------------------------------------------------- */
+.skim-folder-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--skim-muted);
+}
+
+/* The signature: the path as the viewer's H1 bar. */
+.skim-folder-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: 0.1em;
+  background: var(--skim-h1-bg);
+  color: var(--skim-h1-fg);
+  border-radius: 2px;            /* matches .skim h1 */
+  padding: 0.38em 0.85em;
+  margin: 0.5rem 0 0.7rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.55;
+  word-break: break-word;
+}
+.skim-folder-crumb {
+  color: inherit;
+  text-decoration: none;
+  opacity: 0.85;
+  unicode-bidi: isolate;
+}
+a.skim-folder-crumb:hover { opacity: 1; text-decoration: underline; }
+.skim-folder-crumb.is-current { opacity: 1; }
+.skim-folder-sep {
+  opacity: 0.5;
+  font-weight: 400;
+  margin: 0 0.3em;
+}
+.skim-folder-sep:last-child { margin-inline-end: 0; }
+.skim-folder-crumb-root { margin-inline-end: 0.3em; }
+
+.skim-folder-stats {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--skim-muted);
+}
+.skim-folder-stats b {
+  color: var(--skim-link-text);
+  font-weight: 700;
+}
+
+/* Controls: filter + theme toggle --------------------------------------- */
+.skim-folder-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  margin: 1.2rem 0 0.65rem;
+}
+.skim-folder-filterwrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.skim-folder-filter {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--skim-fg);
+  background: var(--skim-panel);
+  border: 1px solid var(--skim-border);
+  border-radius: 6px;
+  padding: 0.45em 2.2em 0.45em 0.75em;
+}
+.skim-folder-filter::placeholder { color: var(--skim-muted); }
+.skim-folder-filter:focus {
+  outline: 2px solid var(--skim-heading);
+  outline-offset: -1px;
+}
+.skim-folder-filter::-webkit-search-cancel-button { -webkit-appearance: none; }
+/* The "/" hint chip: shown while the filter is empty and unfocused. */
+.skim-folder-key {
+  position: absolute;
+  inset-inline-end: 0.55em;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-family: inherit;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--skim-muted);
+  background: var(--skim-code-bg);
+  border: 1px solid var(--skim-border);
+  border-radius: 4px;
+  padding: 0.25em 0.5em;
+}
+.skim-folder-filterwrap:has(.skim-folder-filter:focus) .skim-folder-key,
+.skim-folder-filterwrap:has(.skim-folder-filter:not(:placeholder-shown)) .skim-folder-key { display: none; }
+
+.skim-folder-theme {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--skim-fg);
+  background: var(--skim-panel);
+  border: 1px solid var(--skim-border);
+  border-radius: 6px;
+  padding: 0.45em 0.8em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.skim-folder-theme:hover { border-color: var(--skim-heading); color: var(--skim-heading); }
+.skim-folder-theme:focus-visible {
+  outline: 2px solid var(--skim-heading);
+  outline-offset: -1px;
+}
+
+/* List ------------------------------------------------------------------- */
+.skim-folder-list {
+  border: 1px solid var(--skim-border);
+  border-radius: 8px;
+}
+
+/* Head and rows share one column template so they always align. */
+.skim-folder-head,
+.skim-folder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5em 12.5em;
+  column-gap: 1em;
+  align-items: center;
+  padding: 0 1em;
+}
+
+.skim-folder-head {
+  position: sticky;              /* column labels stay put in long listings */
+  top: 0;
+  z-index: 2;
+  background: var(--skim-panel);
+  border-bottom: 1px solid var(--skim-border);
+  border-radius: 7px 7px 0 0;
+}
+.skim-folder-col {
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: end;
+  color: var(--skim-muted);
+  background: none;
+  border: none;
+  padding: 0.55em 0;
+  cursor: pointer;
+}
+.skim-folder-col[data-key="name"] { text-align: start; }
+.skim-folder-col:hover { color: var(--skim-fg); }
+.skim-folder-col:focus-visible {
+  outline: 2px solid var(--skim-heading);
+  outline-offset: -2px;
+}
+/* Sort indicator, mirroring the viewer's table-sort idiom (↕ on hover, ↑/↓
+   when sorted; the sorted rules come last so they win over hover). */
+.skim-folder-ind { margin-inline-start: 0.35em; opacity: 0; }
+.skim-folder-col:hover .skim-folder-ind { opacity: 0.45; }
+.skim-folder-col:hover .skim-folder-ind::after { content: "\2195"; }
+.skim-folder-col.sorted .skim-folder-ind { opacity: 0.9; }
+.skim-folder-col.sorted .skim-folder-ind::after { content: "\2191"; }
+.skim-folder-col.sorted.desc .skim-folder-ind::after { content: "\2193"; }
+
+.skim-folder-row {
+  padding-top: 0.3em;
+  padding-bottom: 0.3em;
+  font-size: 0.92rem;
+  color: var(--skim-fg);
+  text-decoration: none;
+}
+.skim-folder-row[hidden] { display: none; }   /* filter; beats display:grid */
+.skim-folder-row:hover { background: var(--skim-panel); }
+.skim-folder-row:focus-visible {
+  outline: 2px solid var(--skim-heading);
+  outline-offset: -2px;
+}
+/* Keyboard cursor: the viewer's block-navigation bar, transplanted. */
+.skim-folder-row.is-cursor {
+  background: var(--skim-code-bg);
+  box-shadow: inset 3px 0 0 var(--skim-heading);
+}
+.skim-folder-rows > .skim-folder-row:last-child { border-radius: 0 0 7px 7px; }
+
+.skim-folder-name {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+.skim-folder-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  unicode-bidi: isolate;
+}
+.skim-folder-slash { color: var(--skim-muted); flex: 0 0 auto; }
+
+/* Icons: data-URI masks painted with currentColor so they follow each row
+   type's color in every theme. */
+.skim-folder-icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  align-self: center;
+  margin-inline-end: 0.55em;
+  background: currentColor;
+  -webkit-mask: var(--skim-folder-icon) center / contain no-repeat;
+  mask: var(--skim-folder-icon) center / contain no-repeat;
+}
+.is-dir .skim-folder-icon {
+  --skim-folder-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M1.5 3.4c0-1 .8-1.9 1.9-1.9h2.9c.5 0 1 .2 1.4.6l1 1.1h4c1 0 1.9.8 1.9 1.9v6.5c0 1-.8 1.9-1.9 1.9H3.4c-1 0-1.9-.8-1.9-1.9z'/></svg>");
+  color: var(--skim-heading);
+}
+.is-file .skim-folder-icon {
+  --skim-folder-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M3 2.2C3 1.5 3.5 1 4.2 1h5.1L14 5.7v8.1c0 .7-.5 1.2-1.2 1.2H4.2c-.7 0-1.2-.5-1.2-1.2zm6 .3v3.7h3.7z'/></svg>");
+  color: var(--skim-muted);
+}
+/* Markdown files wear the markdown mark (M↓) — they're the point here. */
+.is-md .skim-folder-icon {
+  --skim-folder-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 208 128'><path fill-rule='evenodd' d='M15 0h178c8.3 0 15 6.7 15 15v98c0 8.3-6.7 15-15 15H15c-8.3 0-15-6.7-15-15V15C0 6.7 6.7 0 15 0zm15 98h20V59l20 25 20-25v39h20V30H90L70 55 50 30H30zm134 0l30-35h-20V30h-20v33h-20z'/></svg>");
+  color: var(--skim-link-text);
+}
+.is-up .skim-folder-icon {
+  --skim-folder-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M8 2.5l4.6 4.6-1.5 1.5-2-2V13H6.9V6.6l-2 2-1.5-1.5z'/></svg>");
+  color: var(--skim-muted);
+}
+
+/* Row typography by kind: dirs in the heading blue, markdown bold in the
+   link green, everything else quiet; dotfiles dimmed. */
+.is-dir .skim-folder-label { color: var(--skim-heading); font-weight: 700; }
+.is-md .skim-folder-label { color: var(--skim-link-text); font-weight: 700; }
+.is-up .skim-folder-label { color: var(--skim-muted); }
+.is-dot .skim-folder-label,
+.is-dot .skim-folder-icon { opacity: 0.55; }
+
+.skim-folder-size,
+.skim-folder-date {
+  font-size: 0.82em;
+  color: var(--skim-muted);
+  text-align: end;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.skim-folder-empty {
+  margin: 0;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--skim-muted);
+}
+
+/* Narrow windows: drop the date column, keep name + size. */
+@media (max-width: 620px) {
+  .skim-folder { padding: 1.4rem 1rem 3rem; }
+  .skim-folder-head,
+  .skim-folder-row { grid-template-columns: minmax(0, 1fr) 6em; }
+  .skim-folder-date { display: none; }
+}
+
+/* Motion: a single hover/cursor tint transition, dropped entirely for
+   reduced-motion readers. */
+@media (prefers-reduced-motion: no-preference) {
+  .skim-folder-row { transition: background-color 0.08s ease; }
+}
+
+@media print {
+  .skim-folder-controls,
+  .skim-folder-key { display: none; }
+}

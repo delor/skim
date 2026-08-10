@@ -1,8 +1,9 @@
 <!doctype html>
 <html>
 <head><meta charset="utf-8"><title>Skim settings</title>
+<link rel="stylesheet" href="../../vendor/fonts.css">
 <link rel="stylesheet" href="../popup/popup.css">
-<style>body { width: 420px; margin: 24px auto; }</style></head>
+<style>html { width: auto; } body { width: 420px; margin: 24px auto; }</style></head>
 <body>
   <header class="skim-pop-head"><img src="../../assets/icon48.png" width="20" height="20" alt=""> <strong>Skim</strong></header>
 
@@ -26,8 +27,6 @@
       <select id="zoom"><option value="0">Off</option><option value="1.25">125%</option><option value="1.5">150%</option></select>
     </label>
     <label class="row"><input type="checkbox" id="autoreload"> Auto-reload when the file changes</label>
-    <label class="row"><input type="checkbox" id="mermaid"> Render mermaid diagrams</label>
-    <button id="force-render">Render this page as Markdown</button>
   </section>
 
   <footer><a href="https://github.com/skim-md/skim" target="_blank" rel="noopener">Open source ♥ GitHub</a></footer>

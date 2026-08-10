@@ -1,0 +1,442 @@
+/* Skim Quiz UI. Every color is a theme token (or the alert accent pair), so
+   all theme/scheme combinations work with no per-theme rules here. Layout is
+   in logical properties: the whole UI mirrors for RTL quizzes via dir. */
+
+:root[data-skim-md="1"] {
+  --skim-quiz-ok: #3fb950;    /* mirrors .skim-alert-tip accent */
+  --skim-quiz-bad: #f85149;   /* mirrors .skim-alert-caution accent */
+}
+html[data-skim-md="1"][data-theme="light"] {
+  --skim-quiz-ok: #1a7f37;
+  --skim-quiz-bad: #cf222e;
+}
+
+/* --- pane ------------------------------------------------------------- */
+.skim-quiz-pane {
+  flex: 0 0 var(--skim-quiz-w, 46%);
+  width: var(--skim-quiz-w, 46%);
+  box-sizing: border-box;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  z-index: 55;
+  opacity: 0;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.skim-quiz-pane[data-side="right"] { transform: translateX(14px); }
+.skim-quiz-pane[data-side="left"]  { transform: translateX(-14px); flex-direction: row-reverse; }
+.skim-quiz-pane.skim-quiz-in { opacity: 1; transform: none; }
+
+.skim-container.skim-quiz-open .skim-toc { display: none; }
+
+/* --- fullscreen -------------------------------------------------------- */
+.skim-quiz-pane.skim-quiz-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: 100vh;
+  z-index: 70;
+  background: var(--skim-bg);
+}
+.skim-quiz-fullscreen .skim-quiz {
+  max-width: 760px;
+  margin-inline: auto;
+  width: 100%;
+}
+.skim-quiz-pane.skim-quiz-switching { transition: opacity 0.22s ease; animation: skim-quiz-pop 0.24s ease; }
+@keyframes skim-quiz-pop {
+  from { opacity: 0.6; transform: scale(0.988); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* --- resizer ------------------------------------------------------------ */
+.skim-quiz-resizer {
+  flex: 0 0 10px;
+  cursor: col-resize;
+  position: relative;
+  touch-action: none;
+}
+.skim-quiz-resizer::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 4px;
+  width: 2px;
+  background: var(--skim-border);
+  transition: background 0.15s ease, width 0.15s ease;
+}
+.skim-quiz-resizer:hover::before,
+.skim-quiz-resizer.active::before,
+.skim-quiz-resizer:focus-visible::before { background: var(--skim-h1-bg); width: 3px; }
+.skim-quiz-resizer:focus-visible { outline: none; }
+.skim-quiz-fullscreen .skim-quiz-resizer { position: absolute; inset-block: 0; width: 10px; z-index: 2; }
+.skim-quiz-fullscreen[data-side="right"] .skim-quiz-resizer { inset-inline-start: 0; }
+.skim-quiz-fullscreen[data-side="left"]  .skim-quiz-resizer { inset-inline-end: 0; }
+
+/* --- quiz frame --------------------------------------------------------- */
+.skim-quiz {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--skim-panel);
+  border-inline-start: 1px solid var(--skim-border);
+  color: var(--skim-fg);
+  font-family: var(--body);
+  position: relative;
+  outline: none;
+}
+.skim-quiz-pane[data-side="left"] .skim-quiz { border-inline-start: none; border-inline-end: 1px solid var(--skim-border); }
+.skim-quiz-fullscreen .skim-quiz { border: none; background: var(--skim-bg); }
+
+.skim-quiz-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.9rem 1.1rem 0.5rem;
+}
+.skim-quiz-title {
+  margin: 0 !important;
+  font-size: 1.05em !important;
+  color: var(--skim-heading) !important;
+  line-height: 1.3;
+}
+.skim-quiz h2.skim-quiz-title::before { content: none; }  /* no "##" prefix here */
+.skim-quiz-progress {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: var(--mono);
+  font-size: 0.68em;
+  color: var(--skim-muted);
+}
+.skim-quiz-actions { display: flex; gap: 0.3rem; flex: 0 0 auto; }
+.skim-quiz-icon {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  line-height: 1;
+  color: var(--skim-muted);
+  background: var(--skim-code-bg);
+  border: 1px solid var(--skim-border);
+  border-radius: 6px;
+  width: 1.9em;
+  height: 1.9em;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.skim-quiz-icon:hover { color: var(--skim-fg); border-color: var(--skim-h1-bg); }
+
+/* --- palette ------------------------------------------------------------ */
+.skim-quiz-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.4rem 1.1rem 0.7rem;
+  border-bottom: 1px solid var(--skim-border);
+}
+.skim-quiz-chip {
+  font-family: var(--mono);
+  font-size: 0.72em;
+  min-width: 2.1em;
+  height: 2.1em;
+  padding: 0 0.4em;
+  border-radius: 6px;
+  border: 1px solid var(--skim-border);
+  background: transparent;
+  color: var(--skim-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+.skim-quiz-chip:hover { border-color: var(--skim-h1-bg); color: var(--skim-fg); transform: translateY(-1px); }
+.skim-quiz-chip.is-answered { background: color-mix(in srgb, var(--skim-h1-bg) 26%, transparent); border-color: var(--skim-h1-bg); color: var(--skim-fg); }
+.skim-quiz-chip.is-current { outline: 2px solid var(--skim-h1-bg); outline-offset: 1px; color: var(--skim-fg); }
+.skim-quiz-chip.is-correct { background: color-mix(in srgb, var(--skim-quiz-ok) 22%, transparent); border-color: var(--skim-quiz-ok); color: var(--skim-fg); }
+.skim-quiz-chip.is-wrong { background: color-mix(in srgb, var(--skim-quiz-bad) 20%, transparent); border-color: var(--skim-quiz-bad); color: var(--skim-fg); }
+
+/* --- body / question ---------------------------------------------------- */
+.skim-quiz-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 1rem 1.1rem 1.2rem;
+}
+.skim-anim-next { animation: skim-quiz-slide-next 0.16s ease-out; }
+.skim-anim-prev { animation: skim-quiz-slide-prev 0.16s ease-out; }
+@keyframes skim-quiz-slide-next {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes skim-quiz-slide-prev {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+[dir="rtl"] > .skim-anim-next { animation-name: skim-quiz-slide-prev; }
+[dir="rtl"] > .skim-anim-prev { animation-name: skim-quiz-slide-next; }
+
+.skim-quiz-qnum {
+  font-family: var(--mono);
+  font-size: 0.68em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--skim-muted);
+  margin-bottom: 0.5rem;
+}
+.skim-quiz-question { font-size: 1.02em; margin-bottom: 1rem; }
+.skim-quiz-md p { margin: 0 0 0.5em; }
+.skim-quiz-md p:last-child { margin-bottom: 0; }
+.skim-quiz-md .skim-math-display { padding: 0.2em 0; }
+
+/* --- choices ------------------------------------------------------------ */
+.skim-quiz-choices { display: flex; flex-direction: column; gap: 0.5rem; }
+.skim-quiz-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  width: 100%;
+  text-align: start;
+  font: inherit;
+  color: var(--skim-fg);
+  background: var(--skim-code-bg);
+  border: 1px solid var(--skim-border);
+  border-radius: 9px;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+.skim-quiz-choice:not(:disabled):hover { border-color: var(--skim-h1-bg); transform: translateY(-1px); }
+.skim-quiz-choice.is-selected {
+  border-color: var(--skim-h1-bg);
+  background: color-mix(in srgb, var(--skim-h1-bg) 16%, var(--skim-code-bg));
+}
+.skim-quiz-choice.is-selected .skim-quiz-choice-key { background: var(--skim-h1-bg); color: var(--skim-h1-fg); border-color: var(--skim-h1-bg); }
+.skim-quiz-choice.is-right {
+  border-color: var(--skim-quiz-ok);
+  background: color-mix(in srgb, var(--skim-quiz-ok) 13%, var(--skim-code-bg));
+}
+.skim-quiz-choice.is-missed {
+  border-color: var(--skim-quiz-bad);
+  background: color-mix(in srgb, var(--skim-quiz-bad) 12%, var(--skim-code-bg));
+}
+.skim-quiz-choice:disabled { cursor: default; }
+.skim-quiz-choice-key {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.72em;
+  min-width: 1.9em;
+  height: 1.9em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--skim-border);
+  border-radius: 5px;
+  color: var(--skim-muted);
+  margin-top: 0.1em;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.skim-quiz-choice-md { flex: 1 1 auto; min-width: 0; }
+
+/* --- hints & explanations ---------------------------------------------- */
+.skim-quiz-hints { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 0.45rem; align-items: flex-start; }
+.skim-quiz-hint {
+  border-inline-start: 3px solid var(--skim-h1-bg);
+  background: color-mix(in srgb, var(--skim-h1-bg) 8%, transparent);
+  border-radius: 0 7px 7px 0;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.92em;
+  align-self: stretch;
+}
+/* Fade only the hint that was just revealed — re-renders (answer clicks,
+   navigation) must not replay it. Opacity-only: a transform here trips an
+   endless-invalidation Chromium bug under software rendering. */
+.skim-quiz-hint.is-fresh { animation: skim-quiz-reveal 0.18s ease-out; }
+[dir="rtl"] .skim-quiz-hint { border-radius: 7px 0 0 7px; }
+@keyframes skim-quiz-reveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.skim-quiz-explain {
+  margin-top: 0.9rem;
+  border-inline-start: 3px solid var(--skim-quiz-ok);
+  background: color-mix(in srgb, var(--skim-quiz-ok) 8%, transparent);
+  border-radius: 0 7px 7px 0;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.92em;
+  animation: skim-quiz-reveal 0.18s ease-out;
+}
+[dir="rtl"] .skim-quiz-explain { border-radius: 7px 0 0 7px; }
+.skim-quiz-explain-tag {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.7em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--skim-quiz-ok);
+  margin-bottom: 0.25rem;
+}
+
+/* --- footer ------------------------------------------------------------- */
+.skim-quiz-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 1.1rem;
+  border-top: 1px solid var(--skim-border);
+}
+.skim-quiz-foot-nav { display: flex; gap: 0.4rem; }
+.skim-quiz-ghost,
+.skim-quiz-primary {
+  font-family: var(--mono);
+  font-size: 0.78em;
+  border-radius: 7px;
+  padding: 0.5em 0.95em;
+  cursor: pointer;
+  transition: filter 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+.skim-quiz-ghost {
+  color: var(--skim-fg);
+  background: var(--skim-code-bg);
+  border: 1px solid var(--skim-border);
+}
+.skim-quiz-ghost:not(:disabled):hover { border-color: var(--skim-h1-bg); }
+.skim-quiz-ghost:disabled { opacity: 0.4; cursor: default; }
+.skim-quiz-primary {
+  color: var(--skim-h1-fg);
+  background: var(--skim-h1-bg);
+  border: 1px solid transparent;
+}
+.skim-quiz-primary:hover { filter: brightness(1.12); transform: translateY(-1px); }
+
+/* --- score card ---------------------------------------------------------- */
+.skim-quiz-scorecard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.5rem;
+}
+.skim-quiz-score-big {
+  font-size: 3.4em;
+  font-weight: 700;
+  color: var(--skim-heading);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.skim-quiz-score-frac { color: var(--skim-muted); font-size: 0.95em; }
+.skim-quiz-score-badge {
+  font-family: var(--mono);
+  font-size: 0.72em;
+  padding: 0.35em 0.9em;
+  border-radius: 999px;
+  border: 1px solid;
+}
+.skim-quiz-score-badge.is-pass { color: var(--skim-quiz-ok); border-color: var(--skim-quiz-ok); background: color-mix(in srgb, var(--skim-quiz-ok) 10%, transparent); }
+.skim-quiz-score-badge.is-fail { color: var(--skim-quiz-bad); border-color: var(--skim-quiz-bad); background: color-mix(in srgb, var(--skim-quiz-bad) 10%, transparent); }
+.skim-quiz-score-actions { display: flex; gap: 0.5rem; margin-top: 0.9rem; flex-wrap: wrap; justify-content: center; }
+
+/* --- confirm ------------------------------------------------------------- */
+.skim-quiz-confirm-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* A solid translucent scrim, deliberately without backdrop-filter: blur on
+     an animated overlay inside the sticky pane stalls Chromium's software
+     compositor (same bug family as the hint reveal transform). */
+  background: color-mix(in srgb, var(--skim-bg) 72%, transparent);
+  animation: skim-quiz-fade 0.14s ease-out;
+}
+.skim-quiz-confirm {
+  background: var(--skim-panel);
+  border: 1px solid var(--skim-border);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  max-width: 78%;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.35);
+}
+.skim-quiz-confirm p { margin: 0 0 0.8rem; }
+.skim-quiz-confirm-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+@keyframes skim-quiz-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* --- picker -------------------------------------------------------------- */
+.skim-quiz-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--skim-bg) 62%, transparent);
+  backdrop-filter: blur(3px);
+  animation: skim-quiz-fade 0.16s ease-out;
+}
+.skim-quiz-picker {
+  width: min(480px, calc(100vw - 3rem));
+  max-height: 76vh;
+  overflow-y: auto;
+  background: var(--skim-panel);
+  border: 1px solid var(--skim-border);
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: skim-quiz-pop 0.2s ease-out;
+  color: var(--skim-fg);
+  font-family: var(--body);
+}
+.skim-quiz-picker-title {
+  margin: 0 0 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.72em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--skim-muted);
+  font-weight: 400;
+}
+.skim-quiz-picker-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: start;
+  font: inherit;
+  color: var(--skim-fg);
+  background: var(--skim-code-bg);
+  border: 1px solid var(--skim-border);
+  border-radius: 9px;
+  padding: 0.7rem 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+.skim-quiz-picker-row:hover,
+.skim-quiz-picker-row:focus-visible { border-color: var(--skim-h1-bg); transform: translateY(-1px); outline: none; }
+.skim-quiz-picker-name { font-weight: 700; }
+.skim-quiz-picker-desc { color: var(--skim-muted); font-size: 0.9em; }
+.skim-quiz-picker-meta { font-family: var(--mono); font-size: 0.68em; color: var(--skim-muted); margin-top: 0.15rem; }
+
+/* UI chrome strings are English even inside an RTL quiz. plaintext resolves
+   each one from its own first strong character, so "…not submitted." keeps
+   its period on the correct side instead of jumping to the RTL edge. */
+.skim-quiz-qnum,
+.skim-quiz-progress,
+.skim-quiz-confirm p,
+.skim-quiz-score-frac,
+.skim-quiz-score-badge,
+.skim-quiz-ghost,
+.skim-quiz-primary,
+.skim-quiz-picker-meta { unicode-bidi: plaintext; }
+
+/* --- global interactions -------------------------------------------------- */
+@media print {
+  .skim-quiz-pane, .skim-quiz-overlay { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skim-quiz-pane,
+  .skim-quiz-pane *,
+  .skim-quiz-overlay,
+  .skim-quiz-overlay * { transition: none !important; animation: none !important; }
+}

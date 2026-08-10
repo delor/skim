@@ -33,7 +33,7 @@ A free, open-source **Markdown viewer and reader** browser extension for **Chrom
 <br>
 
 [![MIT](https://img.shields.io/badge/License-MIT-8b7cff.svg)](#license)
-[![Version 2.1.0](https://img.shields.io/badge/version-2.1.0-informational)](#)
+[![Version 2.3.0](https://img.shields.io/badge/version-2.3.0-informational)](#)
 [![No data collected](https://img.shields.io/badge/data%20collected-none-brightgreen)](#)
 
 </div>
@@ -55,6 +55,14 @@ Skim watches the file and re-renders in place the moment it changes.
 <img width="820" src="promo/png/04-math-mermaid.png" alt="KaTeX math and a mermaid pipeline diagram rendered offline">
 
 KaTeX and Mermaid, rendered locally. Nothing leaves your machine.
+
+<br>
+
+### Quizzes, hidden in your notes.
+
+<img width="820" src="promo/png/06-quiz.png" alt="A quiz rendered in a resizable side pane next to the document, with Hebrew text, LaTeX math, a hint, and a question palette">
+
+Embed choice quizzes in any `.md` file with an invisible `<!-- SKIM-QUIZ -->` comment. Other renderers show nothing; Skim renders a resizable quiz pane with hints, scoring, and review. Markdown, LaTeX, and RTL text all work inside questions. See [SKIM-QUIZ-PROTOCOL.md](SKIM-QUIZ-PROTOCOL.md), or copy the protocol from the popup and hand it to your AI agent.
 
 <br>
 

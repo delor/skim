@@ -485,11 +485,15 @@ html.skim-lightbox-open { overflow: hidden; }
 .skim details > summary::before {
   content: "▸";
   display: inline-block;
-  margin-right: 0.5em;
+  margin-inline-end: 0.5em;
   color: var(--skim-muted);
   transition: transform 0.15s ease;
 }
-.skim details[open] > summary::before { transform: rotate(90deg); }
+.skim details > summary[dir="rtl"]::before,
+[dir="rtl"] .skim details > summary::before { transform: scaleX(-1); }
+.skim details[open] > summary::before,
+.skim details[open] > summary[dir="rtl"]::before,
+[dir="rtl"] .skim details[open] > summary::before { transform: rotate(90deg); }
 .skim details[open] > summary { margin-bottom: 0.4em; }
 
 /* Mermaid diagrams ------------------------------------------------------ */
@@ -537,7 +541,7 @@ html.skim-lightbox-open { overflow: hidden; }
   font-family: var(--mono);
   font-size: 0.72em;
   color: var(--skim-fg);
-  background: #2a2a2a;
+  background: var(--skim-code-bg);
   border: 1px solid var(--skim-border);
   border-radius: 4px;
   padding: 0.2em 0.55em;
@@ -546,7 +550,7 @@ html.skim-lightbox-open { overflow: hidden; }
 }
 .skim pre.skim-code:hover .skim-copy-btn,
 .skim .skim-math:hover .skim-copy-btn { opacity: 0.9; }
-.skim-copy-btn:hover { background: var(--skim-h1-bg); color: #fff; }
+.skim-copy-btn:hover { background: var(--skim-h1-bg); color: var(--skim-h1-fg); }
 .skim .skim-math-display .skim-copy-latex { top: 0.2em; right: 0.2em; }
 .skim .skim-math-inline { position: relative; }
 .skim .skim-math-inline .skim-copy-latex {
@@ -626,7 +630,7 @@ html.skim-lightbox-open { overflow: hidden; }
   white-space: nowrap;
 }
 .skim-toolbar-panel button:hover { filter: brightness(1.1); }
-.skim-theme-toggle { background: #2a2a2a !important; color: var(--skim-fg) !important; border: 1px solid var(--skim-border) !important; }
+.skim-theme-toggle { background: var(--skim-code-bg) !important; color: var(--skim-fg) !important; border: 1px solid var(--skim-border) !important; }
 
 /* "Padding" control: a button that expands to Normal / Big spacing options. */
 .skim-padding-control { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -639,6 +643,9 @@ html.skim-lightbox-open { overflow: hidden; }
 .skim-export-control { display: flex; flex-direction: column; gap: 0.35rem; }
 .skim-export-margins { display: flex; align-items: center; gap: 0.25rem; }
 .skim-export-margins-label {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.2;
   font-family: var(--mono);
   font-size: 0.68em;
   color: var(--skim-muted);

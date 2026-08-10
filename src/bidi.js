@@ -104,6 +104,126 @@ export function textDirection(text) {
   return null;
 }
 
+// Strong bidi class of a single character, for neighbors-of-a-symbol checks.
+export function strongDirOfChar(char) {
+  if (RTL_LETTER.test(char)) return 'rtl';
+  if (LETTER.test(char)) return 'ltr';
+  return null;
+}
+
+// Nearest explicitly-set direction an element lives under (applyBidi has put
+// `dir` on every prose block, so after it runs this is the effective base
+// direction of any text position).
+export function effectiveDir(element) {
+  for (let p = element; p; p = p.parentElement) {
+    const d = p.getAttribute('dir');
+    if (d === 'rtl' || d === 'ltr') return d;
+  }
+  return null;
+}
+
+// --- Phrase-level LTR islands in RTL prose ------------------------------
+// The Unicode bidi algorithm resolves punctuation between an LTR word and RTL
+// text to the paragraph direction, which visually tears mixed phrases apart:
+// `"Closed?"` renders as `"?Closed"`, `2024-B Q3` as `B Q3-2024`, `C++` as
+// `++C`. Detect such phrases and give each one its own <bdi dir="ltr"> so the
+// phrase keeps its internal order while still flowing as a unit in the RTL
+// sentence. Deliberately conservative: a lone Latin word, trailing sentence
+// punctuation, and Hebrew gershayim acronyms (צה"ל) are left to the browser,
+// which already handles them correctly.
+
+// A quoted phrase whose content is purely LTR owns its quotes and internal
+// punctuation (`"SET bounded?"` is a label, `?` included).
+const QUOTE_PAIRS = [['"', '"'], ['“', '”']];
+
+// Latin/digit tokens joined by short neutral separators (`2024-B Q3`,
+// `kernel(x)`, `GPT-4`), plus `C++` / `C#` style suffixes.
+const TOKEN_RUN = /[A-Za-z0-9À-ɏ]+(?:[  .,:;/\-+&'’"!?*=%#_@()[\]]{1,3}[A-Za-z0-9À-ɏ]+)*(?:\+\+|#)?/g;
+
+const CLOSERS = [['(', ')'], ['[', ']']];
+
+function overlapsAny(ranges, start, end) {
+  return ranges.some((r) => start < r.end && end > r.start);
+}
+
+// All [start, end) spans of `text` that should render as isolated LTR phrases.
+export function ltrIslandRanges(text) {
+  const ranges = [];
+
+  for (const [open, close] of QUOTE_PAIRS) {
+    let i = 0;
+    while ((i = text.indexOf(open, i)) !== -1) {
+      const j = text.indexOf(close, i + 1);
+      if (j === -1) break;
+      const inner = text.slice(i + 1, j);
+      if (inner.length <= 120 && !inner.includes('\n') && /[A-Za-z]/.test(inner) && !RTL_LETTER.test(inner)) {
+        ranges.push({ start: i, end: j + 1 });
+        i = j + 1;
+      } else {
+        // Not a pure-LTR quote (gershayim, Hebrew quote, …): retry from the
+        // next character so a later real pair can still match.
+        i += 1;
+      }
+    }
+  }
+
+  TOKEN_RUN.lastIndex = 0;
+  let m;
+  while ((m = TOKEN_RUN.exec(text))) {
+    const start = m.index;
+    let end = start + m[0].length;
+    // Absorb a trailing closer whose opener sits inside the run, so
+    // `kernel(x)` keeps its closing paren.
+    for (const [open, close] of CLOSERS) {
+      const body = text.slice(start, end);
+      const unbalanced = (body.split(open).length - 1) - (body.split(close).length - 1);
+      if (unbalanced > 0 && text[end] === close) end += 1;
+    }
+    const body = text.slice(start, end);
+    // Only isolate when the browser would actually misorder it: digits mixed
+    // with letters, ++/# suffixes, or bracket pairs. Anything else (a lone
+    // word, letters joined by `.`/`/`) already renders correctly.
+    const risky = /[0-9]/.test(body) || /(?:\+\+|#)$/.test(body) || /[()[\]]/.test(body);
+    if (!/[A-Za-z]/.test(body) || !risky) continue;
+    if (overlapsAny(ranges, start, end)) continue;
+    ranges.push({ start, end });
+  }
+
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+// Wrap every LTR-phrase range found in RTL-context text nodes in <bdi>.
+function isolateLtrPhrases(article) {
+  const doc = article.ownerDocument;
+  const walker = doc.createTreeWalker(article, 4); // NodeFilter.SHOW_TEXT
+  const nodes = [];
+  let node;
+  while ((node = walker.nextNode())) nodes.push(node);
+
+  for (const textNode of nodes) {
+    const parent = textNode.parentElement;
+    if (!parent) continue;
+    if (parent.closest(FIXED_LTR_SELECTOR)) continue;
+    if (effectiveDir(parent) !== 'rtl') continue;
+    const ranges = ltrIslandRanges(textNode.data);
+    if (!ranges.length) continue;
+
+    const frag = doc.createDocumentFragment();
+    let last = 0;
+    for (const range of ranges) {
+      if (range.start > last) frag.append(doc.createTextNode(textNode.data.slice(last, range.start)));
+      const isolate = doc.createElement('bdi');
+      isolate.className = 'skim-ltr-phrase';
+      isolate.setAttribute('dir', 'ltr');
+      isolate.textContent = textNode.data.slice(range.start, range.end);
+      frag.append(isolate);
+      last = range.end;
+    }
+    if (last < textNode.data.length) frag.append(doc.createTextNode(textNode.data.slice(last)));
+    textNode.parentNode.replaceChild(frag, textNode);
+  }
+}
+
 function sentenceParts(text) {
   if (globalThis.Intl?.Segmenter) {
     const segmenter = new Intl.Segmenter(undefined, { granularity: 'sentence' });
@@ -220,4 +340,8 @@ export function applyBidi(article) {
   article.querySelectorAll('p, summary, dd, dt, figcaption, td, th').forEach((node) => {
     isolateSentenceDirectionChanges(node);
   });
+
+  // Finally, isolate mixed LTR phrases (quoted English labels, letter-digit
+  // runs) inside RTL prose so their internal punctuation cannot reorder.
+  isolateLtrPhrases(article);
 }

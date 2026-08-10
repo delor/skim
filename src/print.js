@@ -220,9 +220,11 @@ const MARGINS = [
 // as the popup, and reads the current value straight off <html> so both stay in
 // step without either having to know about the other.
 function buildMarginPicker() {
+  // Two stacked lines ("Export" over "Margin") so the label says what the
+  // margin applies to without widening the row.
   const row = el('div', { className: 'skim-export-margins' }, el('span', {
-    className: 'skim-export-margins-label', textContent: 'Margin',
-  }));
+    className: 'skim-export-margins-label',
+  }, [el('span', { textContent: 'Export' }), el('span', { textContent: 'Margin' })]));
   const optByValue = new Map();
   const mark = () => {
     const cur = document.documentElement.getAttribute('data-skim-print-margin') || 'normal';

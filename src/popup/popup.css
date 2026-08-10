@@ -1,32 +1,147 @@
-body { width: 300px; margin: 0; font: 13px/1.45 system-ui, sans-serif; background: #0d1017; color: #e8eaf0; }
-.skim-pop-head { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #262b38; }
-section { padding: 10px 12px; display: grid; gap: 8px; }
-label { display: grid; gap: 3px; }
-label.row { grid-auto-flow: column; justify-content: start; align-items: center; gap: 6px; }
-select, button { font: inherit; background: #161b26; color: inherit; border: 1px solid #2c3344; border-radius: 6px; padding: 5px 8px; }
-button { cursor: pointer; }
-button.primary { background: #7aa2ff; border-color: #7aa2ff; color: #0d1017; font-weight: 600; }
-/* The one action people come to the popup for: give it real presence. */
-button.hero {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-  padding: 11px 12px; margin-bottom: 4px;
-  background: linear-gradient(135deg, #7aa2ff, #a78bfa);
-  border: none; border-radius: 9px; color: #0d1017;
-  box-shadow: 0 2px 10px rgba(122, 162, 255, 0.3);
+/* The popup wears the viewer's own skin: the skim.css glamour palette, the
+   mono UI face the in-page toolbar is set in, and the lavender h1-bar accent
+   its buttons use. Dark is the default exactly like the viewer; popup.js sets
+   data-theme from the shared `theme` setting so the two always match. */
+:root {
+  --pop-bg: #15151a;
+  --pop-fg: #cfcfd4;
+  --pop-heading: #4ab8f5;
+  --pop-panel: #1f1f26;
+  --pop-border: #3a3a44;
+  --pop-muted: #7e7e86;
+  --pop-accent: #6b6be4;      /* --skim-h1-bg: the toolbar-button lavender */
+  --pop-accent-fg: #f4f2b0;   /* --skim-h1-fg */
+  --pop-link: #3fb6b6;
+  --pop-link-hover: #4fb886;
+  --pop-code-fg: #f06b6b;
+  --pop-code-bg: #2c2c34;
+  --pop-star: #ffd76b;
+  --mono: "Skim Mono", "Skim Hebrew", ui-monospace, "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
 }
-button.hero:hover { filter: brightness(1.07); }
+:root[data-theme="light"] {
+  --pop-bg: #f4f3ee;
+  --pop-fg: #3a3a40;
+  --pop-heading: #4a6f9c;
+  --pop-panel: #eeece4;
+  --pop-border: #e0ded4;
+  --pop-muted: #8a8a80;
+  --pop-accent: #7d7de0;
+  --pop-accent-fg: #f4f3ee;
+  --pop-link: #5a7faa;
+  --pop-link-hover: #4f8c63;
+  --pop-code-fg: #b35a72;
+  --pop-code-bg: #eae8e0;
+  --pop-star: #dfa32e;
+}
+
+/* Chrome sizes the popup bubble to the body, then caps it at 600px tall; when
+   content is taller, the vertical scrollbar eats into a fixed-width body and
+   forces a horizontal one. border-box + overflow-x guard keep that impossible
+   even if a future section grows the popup past the cap. */
+* { box-sizing: border-box; }
+/* The bubble takes its size from the root: pin BOTH html and body to the one
+   width, kill horizontal scrolling at the root, and paint html with the theme
+   so the page also looks right when opened as a tab. color-scheme keeps native
+   control internals (select dropdown, scrollbars) on the right palette. */
+html {
+  width: 340px; overflow-x: hidden;
+  background: var(--pop-bg);
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
+body {
+  width: 340px; margin: 0 auto; overflow-x: hidden;
+  font: 12.5px/1.5 var(--mono);
+  background: var(--pop-bg); color: var(--pop-fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.skim-pop-head {
+  display: flex; gap: 8px; align-items: center;
+  padding: 11px 14px; border-bottom: 1px solid var(--pop-border);
+  font-size: 13.5px;
+}
+.skim-pop-head strong { color: var(--pop-heading); letter-spacing: 0.02em; }
+
+section { padding: 14px; display: grid; gap: 12px; }
+/* THE original "banner never hides" bug: author `display: grid` on section
+   overrides the UA's `[hidden] { display: none }` (author origin wins over UA
+   origin regardless of specificity), which kept the file-access nag rendered
+   for everyone no matter what popup.js decided — and its extra height pushed
+   the popup past Chrome's 600px cap, whose scrollbar then forced the
+   horizontal overflow. Never let a display value defeat `hidden` again. */
+[hidden] { display: none !important; }
+
+label { display: grid; gap: 5px; min-width: 0; position: relative; color: var(--pop-muted); }
+label.row { grid-auto-flow: column; justify-content: start; align-items: center; gap: 8px; color: var(--pop-fg); }
+
+select {
+  appearance: none; width: 100%;
+  font: inherit; color: var(--pop-fg);
+  background: var(--pop-panel);
+  border: 1px solid var(--pop-border); border-radius: 8px;
+  padding: 7px 30px 7px 10px;
+  cursor: pointer;
+}
+select:hover { border-color: var(--pop-muted); }
+/* Chevron for the de-chromed select (the select is the label's last row). */
+label:has(select)::after {
+  content: "▾"; position: absolute; right: 11px; bottom: 7px;
+  color: var(--pop-muted); pointer-events: none;
+}
+input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--pop-accent); }
+
+button { font: inherit; cursor: pointer; border: none; border-radius: 8px; }
+button.primary {
+  background: var(--pop-accent); color: var(--pop-accent-fg);
+  padding: 8px 12px; font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+button.primary:hover { filter: brightness(1.1); }
+
+/* The one action people come to the popup for: the viewer's toolbar button,
+   grown up. */
+button.hero {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 12px 13px;
+  background: var(--pop-accent); color: var(--pop-accent-fg);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+button.hero:hover { filter: brightness(1.1); }
 button.hero:active { transform: translateY(1px); }
 button.hero:disabled { opacity: 0.6; cursor: default; }
-.hero-icon { font-size: 19px; line-height: 1; }
-.hero-text { display: grid; gap: 1px; font-weight: 700; font-size: 13.5px; }
-.hero-text small { font-weight: 500; font-size: 11px; opacity: 0.72; }
-#file-cta { background: #131a2b; border-bottom: 1px solid #262b38; }
-#file-cta ol { margin: 0; padding-left: 18px; }
-footer { padding: 8px 12px; border-top: 1px solid #262b38; }
-footer a { color: #7aa2ff; text-decoration: none; }
-@media (prefers-color-scheme: light) {
-  body { background: #fff; color: #1c2130; }
-  .skim-pop-head, footer { border-color: #e3e6ee; }
-  select, button { background: #f3f5f9; border-color: #d8dce8; }
-  #file-cta { background: #eef3ff; border-color: #e3e6ee; }
+.hero-icon { font-size: 20px; line-height: 1; }
+.hero-text { display: grid; gap: 2px; font-weight: 700; font-size: 13px; }
+.hero-text small { font-weight: 400; font-size: 10.5px; opacity: 0.78; }
+
+/* Once-in-a-lifetime action: a quiet text line, deliberately NOT a button
+   shape so it can't compete with the clipboard hero in the visual hierarchy. */
+button.linkish {
+  background: none; border: none; padding: 0;
+  justify-self: start; text-align: left;
+  color: var(--pop-muted); font: inherit; font-size: 11px;
 }
+button.linkish:hover { color: var(--pop-link); text-decoration: underline; }
+
+#file-cta { background: var(--pop-panel); border-bottom: 1px solid var(--pop-border); }
+#file-cta p { margin: 0; }
+#file-cta ol { margin: 0; padding-left: 18px; color: var(--pop-muted); }
+code {
+  font-family: inherit; color: var(--pop-code-fg);
+  background: var(--pop-code-bg); padding: 1px 5px; border-radius: 4px;
+}
+
+/* Make-Chrome-your-.md-opener nudge: quiet, one breath, no chrome. */
+.tip { margin: 0; color: var(--pop-muted); font-size: 11px; line-height: 1.55; }
+
+footer {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-top: 1px solid var(--pop-border);
+  font-size: 11.5px;
+}
+footer a { color: var(--pop-link); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+footer a:hover { color: var(--pop-link-hover); text-decoration: underline; }
+footer .dot { color: var(--pop-muted); }
+/* A real gold star for the store-rating link, not the mono face's dingbat. */
+footer .star { width: 12px; height: 12px; fill: var(--pop-star); filter: drop-shadow(0 0 2px rgba(255, 215, 107, 0.35)); }

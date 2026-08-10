@@ -59,8 +59,13 @@ export function enableInternalLinks(article) {
 
   // Back/Forward through the jump history: scroll to wherever the hash now
   // points. Bound to window (hash changes are document-global), torn down with
-  // the same controller so auto-reload never stacks duplicates.
-  window.addEventListener('popstate', scrollToHash, { signal: controller.signal });
+  // the same controller so auto-reload never stacks duplicates. Quiz history
+  // entries (quiz-ui.js) keep the URL unchanged — re-scrolling on those would
+  // yank the article while the reader pages through quiz questions.
+  window.addEventListener('popstate', (e) => {
+    if (e.state?.skimQuiz || e.state?.skimQuizBelow) return;
+    scrollToHash();
+  }, { signal: controller.signal });
 }
 
 export function setupAnchors(article) {

@@ -1676,3 +1676,273 @@ test('smooth scroll: scrolling by other means mid-glide carries the remainder ov
   f.run();
   assert.equal(Math.round(f.y()), jumped + Math.round(remaining));
 });
+
+// --- Hebrew/English/math mixed rendering (bidi phrase isolation) --------
+const { normalizeInlineMath } = await import('../src/render.js');
+const { ltrIslandRanges } = await import('../src/bidi.js');
+
+test('normalizeInlineMath collapses double-escaped commands in inline math', () => {
+  assert.equal(normalizeInlineMath('\\|x\\\\|\\le\\sqrt3'), '\\|x\\|\\le\\sqrt3');
+  assert.equal(normalizeInlineMath('x\\\\le 1'), 'x\\le 1');
+});
+
+test('normalizeInlineMath keeps sources where collapsing breaks parsing', () => {
+  assert.equal(normalizeInlineMath('a\\\\b'), 'a\\\\b');
+});
+
+test('normalizeInlineMath leaves environment math alone', () => {
+  const src = '\\begin{cases}a\\\\b\\end{cases}';
+  assert.equal(normalizeInlineMath(src), src);
+});
+
+test('renderMarkdown renders double-escaped inline math without a line break', () => {
+  const html = renderMarkdown('כל האיברים אי-שליליים, לכן $\\|x\\\\|\\le\\sqrt3$.');
+  assert.ok(html.includes('skim-math-inline'), 'inline math rendered');
+  assert.ok(!html.includes('newline'), 'no hard line break inside the formula');
+});
+
+test('ltrIslandRanges isolates quoted English phrases with their punctuation', () => {
+  const text = 'סגורה — שורת "Closed?": בדיקה';
+  const ranges = ltrIslandRanges(text);
+  assert.equal(ranges.length, 1);
+  assert.equal(text.slice(ranges[0].start, ranges[0].end), '"Closed?"');
+});
+
+test('ltrIslandRanges isolates Latin-digit runs so separators stay put', () => {
+  const text = 'הקבוצה של 2024-B Q3, ושם';
+  const r = ltrIslandRanges(text);
+  assert.equal(r.length, 1);
+  assert.equal(text.slice(r[0].start, r[0].end), '2024-B Q3');
+});
+
+test('ltrIslandRanges leaves gershayim acronyms and lone Latin words alone', () => {
+  assert.equal(ltrIslandRanges('צה"ל פרסם הודעה').length, 0);
+  assert.equal(ltrIslandRanges('שורות סמוכות ב-CLASSIFY, אחת').length, 0);
+});
+
+test('ltrIslandRanges keeps trailing sentence punctuation outside the island', () => {
+  const text = 'ראה GPT-4, בהמשך';
+  const r = ltrIslandRanges(text);
+  assert.equal(r.length, 1);
+  assert.equal(text.slice(r[0].start, r[0].end), 'GPT-4');
+});
+
+test('ltrIslandRanges absorbs balanced trailing brackets and ++ suffixes', () => {
+  const t1 = 'קרא kernel(x) עכשיו';
+  const r1 = ltrIslandRanges(t1);
+  assert.equal(t1.slice(r1[0].start, r1[0].end), 'kernel(x)');
+  const t2 = 'שפת C++ היא';
+  const r2 = ltrIslandRanges(t2);
+  assert.equal(t2.slice(r2[0].start, r2[0].end), 'C++');
+});
+
+test('applyBidi wraps LTR phrases inside RTL paragraphs in ltr isolates', () => {
+  const article = document.createElement('article');
+  article.innerHTML = '<p>חסומה — שורת "SET bounded?", הסעיף של 2024-B Q3 בהמשך</p>';
+  applyBidi(article);
+  const isolates = [...article.querySelectorAll('p bdi[dir="ltr"]')];
+  assert.deepEqual(isolates.map((b) => b.textContent), ['"SET bounded?"', '2024-B Q3']);
+});
+
+test('applyBidi adds no phrase isolates to LTR paragraphs', () => {
+  const article = document.createElement('article');
+  article.innerHTML = '<p>see "Closed?" and GPT-4 here</p>';
+  applyBidi(article);
+  assert.equal(article.querySelectorAll('bdi').length, 0);
+});
+
+test('decorateSymbols mirrors implication arrows in RTL flow', () => {
+  const a = tableArticle('<p>רציפה ⇒ סגורה תמיד</p>');
+  applyBidi(a);
+  decorateSymbols(a);
+  const sym = a.querySelector('.skim-sym');
+  assert.equal(sym.dataset.sym, '⇒');
+  assert.ok(sym.innerHTML.includes('⇐'), 'rendered glyph points with the RTL flow');
+});
+
+test('decorateSymbols keeps arrows between Latin operands unmirrored in RTL paragraphs', () => {
+  const a = tableArticle('<p>נגדיר A ⇒ B ולכן נמשיך בעברית</p>');
+  applyBidi(a);
+  decorateSymbols(a);
+  const sym = a.querySelector('.skim-sym');
+  assert.ok(sym.innerHTML.includes('⇒'), 'stays a rightward arrow');
+});
+
+test('KaTeX character-metrics warnings never reach the console', () => {
+  const seen = [];
+  const orig = console.warn;
+  console.warn = (...a) => seen.push(a[0]);
+  try {
+    renderMarkdown('שלום $\\text{עברית}$ עולם $x^2$');
+  } finally {
+    console.warn = orig;
+  }
+  assert.ok(
+    !seen.some((m) => typeof m === 'string' && m.startsWith('No character metrics for')),
+    'metrics warnings are filtered'
+  );
+});
+
+// --- Skim quiz protocol -------------------------------------------------
+const { parseQuizzes, scoreQuiz } = await import('../src/quiz.js');
+
+const QUIZ_DOC = [
+  '# פתרון מלא',
+  '',
+  'תוכן רגיל עם $x^2$ ועברית.',
+  '',
+  '<!-- SKIM-QUIZ',
+  JSON.stringify({
+    skimQuiz: 1,
+    id: 'compact-drill',
+    title: 'קומפקטיות',
+    description: 'סגורה, חסומה, ויירשטראס',
+    layout: 'third',
+    pass: 0.7,
+    questions: [
+      { q: 'מתי $\\{g\\le c\\}$ **סגורה**?', choices: ['רציפות ואי-שוויון לא חד', 'חסימות'], answer: 0, hint: 'תמונה הפוכה', explain: 'קרן סגורה נמשכת לאחור.' },
+      { q: 'Which are norms on $\\mathbb{R}^2$?', choices: ['$\\|x\\|_1$', '$x_1^2$', '$\\|x\\|_\\infty$'], answer: [0, 2], hint: ['Think homogeneity.', 'Squares are not homogeneous.'] },
+    ],
+  }),
+  '-->',
+  '',
+  'עוד תוכן.',
+  '',
+  '<!-- SKIM-QUIZ',
+  JSON.stringify({ skimQuiz: 1, title: 'Second quiz', questions: [{ q: 'One?', choices: ['a', 'b'], answer: 1 }] }),
+  '-->',
+].join('\n');
+
+test('parseQuizzes extracts and normalizes multiple quizzes', () => {
+  const quizzes = parseQuizzes(QUIZ_DOC);
+  assert.equal(quizzes.length, 2);
+  const [q1, q2] = quizzes;
+  assert.equal(q1.id, 'compact-drill');
+  assert.equal(q1.title, 'קומפקטיות');
+  assert.equal(q1.layout, 'third');
+  assert.equal(q1.pass, 0.7);
+  assert.equal(q1.questions[0].multi, false);
+  assert.deepEqual(q1.questions[0].answers, [0]);
+  assert.deepEqual(q1.questions[0].hints, ['תמונה הפוכה']);
+  assert.equal(q1.questions[0].explain, 'קרן סגורה נמשכת לאחור.');
+  assert.equal(q1.questions[1].multi, true);
+  assert.deepEqual(q1.questions[1].answers, [0, 2]);
+  assert.deepEqual(q1.questions[1].hints, ['Think homogeneity.', 'Squares are not homogeneous.']);
+  assert.equal(q2.id, 'quiz-2');       // defaulted, position-based
+  assert.equal(q2.layout, 'half');     // default layout
+  assert.equal(q2.pass, null);
+});
+
+test('parseQuizzes skips invalid quizzes and non-quiz comments', () => {
+  const doc = [
+    '<!-- ordinary comment -->',
+    '<!-- SKIM-QUIZ { not json } -->',
+    '<!-- SKIM-QUIZ ' + JSON.stringify({ skimQuiz: 1, title: 'bad answer', questions: [{ q: 'x', choices: ['a', 'b'], answer: 5 }] }) + ' -->',
+    '<!-- SKIM-QUIZ ' + JSON.stringify({ skimQuiz: 1, title: 'ok', questions: [{ q: 'x', choices: ['a', 'b'], answer: 1 }] }) + ' -->',
+  ].join('\n');
+  const quizzes = parseQuizzes(doc);
+  assert.equal(quizzes.length, 1);
+  assert.equal(quizzes[0].title, 'ok');
+});
+
+test('parseQuizzes ignores quiz examples inside code fences', () => {
+  const doc = [
+    '```markdown',
+    '<!-- SKIM-QUIZ ' + JSON.stringify({ skimQuiz: 1, title: 'example', questions: [{ q: 'x', choices: ['a', 'b'], answer: 0 }] }) + ' -->',
+    '```',
+  ].join('\n');
+  assert.equal(parseQuizzes(doc).length, 0);
+});
+
+test('the protocol document itself exposes no quizzes', async () => {
+  const src = await readFile(new URL('../SKIM-QUIZ-PROTOCOL.md', import.meta.url), 'utf8');
+  assert.equal(parseQuizzes(src).length, 0);
+});
+
+test('escaped dashes keep --> sequences from breaking the comment', () => {
+  const doc = '<!-- SKIM-QUIZ {"skimQuiz":1,"title":"t","questions":[{"q":"a \\u002D\\u002D> b?","choices":["x","y"],"answer":0}]} -->';
+  const quizzes = parseQuizzes(doc);
+  assert.equal(quizzes.length, 1);
+  assert.equal(quizzes[0].questions[0].q, 'a --> b?');
+});
+
+test('scoreQuiz scores single, multi, and skipped answers', () => {
+  const quiz = parseQuizzes(QUIZ_DOC)[0];
+  const full = scoreQuiz(quiz, [0, [0, 2]]);
+  assert.deepEqual({ correct: full.correct, total: full.total }, { correct: 2, total: 2 });
+  const partial = scoreQuiz(quiz, [1, [2, 0]]);   // wrong single; multi order-insensitive
+  assert.equal(partial.correct, 1);
+  assert.equal(partial.per[0].correct, false);
+  const skipped = scoreQuiz(quiz, [null, null]);
+  assert.equal(skipped.correct, 0);
+  assert.equal(skipped.per[0].answered, false);
+  const wrongSubset = scoreQuiz(quiz, [0, [0]]);  // multi must match exactly
+  assert.equal(wrongSubset.correct, 1);
+});
+
+// --- quiz UI (jsdom smoke; full interaction is covered by browser e2e) --
+const { buildQuizControl } = await import('../src/quiz-ui.js');
+
+function mountQuizFixture(quizList, articleDir) {
+  const container = document.createElement('div');
+  container.className = 'skim-container';
+  const article = document.createElement('article');
+  if (articleDir) article.setAttribute('dir', articleDir);
+  container.append(article);
+  document.body.append(container);
+  const button = buildQuizControl({ quizzes: quizList, container, article });
+  document.body.append(button);
+  return { container, button };
+}
+
+test('quiz UI: open, answer, hint, submit, review', () => {
+  const realMatch = window.matchMedia;
+  window.matchMedia = () => ({ matches: true });   // skip score count-up animation
+  try {
+    const quizzes = parseQuizzes(QUIZ_DOC);
+    const { container, button } = mountQuizFixture([quizzes[0]], 'rtl');
+    button.click();
+
+    const pane = container.querySelector('.skim-quiz-pane');
+    assert.ok(pane, 'pane mounted on open');
+    assert.equal(pane.dataset.side, 'left', 'RTL article gets the pane at its inline-end');
+    assert.equal(container.querySelectorAll('.skim-quiz-chip').length, 2);
+    assert.ok(container.querySelector('.skim-quiz .skim-math'), 'LaTeX rendered inside the question');
+
+    container.querySelectorAll('.skim-quiz-choice')[0].click();
+    assert.ok(container.querySelector('.skim-quiz-chip.is-answered'), 'palette marks the answer');
+
+    const hintBtn = [...container.querySelectorAll('button')].find((b) => b.textContent.includes('Hint'));
+    hintBtn.click();
+    assert.ok(container.querySelector('.skim-quiz-hint'), 'hint revealed');
+
+    container.querySelectorAll('.skim-quiz-chip')[1].click();      // go to Q2 (multi)
+    const c2 = container.querySelectorAll('.skim-quiz-choice');
+    c2[0].click();
+    container.querySelectorAll('.skim-quiz-choice')[2].click();    // re-query: renderAll rebuilt
+
+    [...container.querySelectorAll('button')].find((b) => b.textContent === 'Submit').click();
+    assert.ok(container.querySelector('.skim-quiz-scorecard'), 'score view shown');
+    assert.match(container.querySelector('.skim-quiz-score-big').textContent, /100%/);
+    assert.equal(container.querySelectorAll('.skim-quiz-chip.is-correct').length, 2);
+
+    container.querySelectorAll('.skim-quiz-chip')[0].click();      // review Q1 from score
+    assert.ok(container.querySelector('.skim-quiz-choice.is-right'), 'correct choice highlighted in review');
+    assert.ok(container.querySelector('.skim-quiz-explain'), 'explanation shown in review');
+
+    pane.remove();
+    container.remove();
+  } finally {
+    window.matchMedia = realMatch;
+  }
+});
+
+test('quiz UI: LTR article docks the pane on the right', () => {
+  const quizzes = parseQuizzes(QUIZ_DOC);
+  const { container, button } = mountQuizFixture([quizzes[1]], 'ltr');
+  button.click();
+  const pane = container.querySelector('.skim-quiz-pane');
+  assert.equal(pane.dataset.side, 'right');
+  pane.remove();
+  container.remove();
+});

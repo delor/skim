@@ -89,7 +89,7 @@ jobs:
           VERSION="$(node -p "require('./manifest.json').version")"
           ZIP="skim-${VERSION}.zip"
           zip -qr "$ZIP" \
-            manifest.json src dist vendor assets _locales examples LICENSE \
+            manifest.json SKIM-QUIZ-PROTOCOL.md src dist vendor assets _locales examples LICENSE \
             -x '*/.DS_Store'
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
