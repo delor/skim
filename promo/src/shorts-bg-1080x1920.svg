@@ -22,26 +22,23 @@
   <g filter="url(#iconshadow)" transform="translate(404 210) scale(3.4)"><use xlink:href="#skimicon"/></g>
   <text x="510" y="272" font-family="Inter, system-ui, sans-serif" font-size="72" font-weight="700" fill="#ffffff" letter-spacing="-1.5">Skim</text>
 
-  <!-- Headline above the video slot -->
-  <text x="540" y="420" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="58" font-weight="700" fill="#ffffff" letter-spacing="-1">Read what your AI wrote.</text>
-  <text x="540" y="492" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="58" font-weight="700" fill="#ffd866" letter-spacing="-1">Instantly.</text>
 
-  <!-- Video slot: 1080x608 band centered at y=960 (occupies 656..1264), left empty -->
+  <!-- Video slot: 1080x846 band centered at y=960 (occupies 537..1383), left empty -->
 
   <!-- Below the video: one-liner -->
-  <text x="540" y="1372" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="34" fill="#eef2ff">The free markdown viewer for your browser.</text>
+  <text x="540" y="1478" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="34" fill="#eef2ff">The free markdown viewer for your browser.</text>
 
   <!-- Feature chips -->
   <g font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="26" fill="#dbe4ff" text-anchor="middle">
-    <rect x="192" y="1424" width="230" height="58" rx="29" fill="#0d1017" opacity="0.25"/>
-    <text x="307" y="1462">live reload</text>
-    <rect x="438" y="1424" width="262" height="58" rx="29" fill="#0d1017" opacity="0.25"/>
-    <text x="569" y="1462">math + charts</text>
-    <rect x="716" y="1424" width="172" height="58" rx="29" fill="#0d1017" opacity="0.25"/>
-    <text x="802" y="1462">quizzes</text>
+    <rect x="192" y="1524" width="230" height="58" rx="29" fill="#0d1017" opacity="0.25"/>
+    <text x="307" y="1562">live reload</text>
+    <rect x="438" y="1524" width="262" height="58" rx="29" fill="#0d1017" opacity="0.25"/>
+    <text x="569" y="1562">math + charts</text>
+    <rect x="716" y="1524" width="172" height="58" rx="29" fill="#0d1017" opacity="0.25"/>
+    <text x="802" y="1562">quizzes</text>
   </g>
 
   <!-- Bottom: site -->
-  <text x="540" y="1720" text-anchor="middle" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="34" fill="#ffffff" opacity="0.95">skim.md</text>
-  <text x="540" y="1772" text-anchor="middle" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="24" fill="#dbe4ff" opacity="0.85">free &#183; open source &#183; no account</text>
+  <text x="540" y="1750" text-anchor="middle" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="34" fill="#ffffff" opacity="0.95">skim.md</text>
+  <text x="540" y="1800" text-anchor="middle" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="24" fill="#dbe4ff" opacity="0.85">free &#183; open source &#183; no account</text>
 </svg>
