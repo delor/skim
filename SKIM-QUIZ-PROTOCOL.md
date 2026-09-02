@@ -67,7 +67,8 @@ Top-level object:
 | `description` | string  | no       | One line shown in the picker so readers can choose between quizzes. |
 | `layout`      | string  | no       | Initial presentation: `"half"` (side pane, 1/2 width), `"third"` (side pane, 1/3), or `"full"` (fullscreen). Default `"half"`. Readers can resize/convert freely. |
 | `pass`        | number  | no       | Pass threshold in `0..1` (e.g. `0.7`). When present the score screen shows pass/fail. |
-| `shuffle`     | boolean | no       | Shuffle question order per attempt. Default `false`. Choice order is never shuffled (options like "All of the above" must stay last). |
+| `shuffle`     | boolean | no       | Shuffle question order per attempt. Default `false`. |
+| `shuffleChoices` | boolean | no    | Shuffle choice order per attempt. **Default `true`** — hand-written quizzes tend to put the correct option first, and readers learn that faster than the material. Options that only make sense in place ("All of the above", "None of the above", "אף אחת מהתשובות") keep their authored slot automatically. Set `false` for a question set whose order carries meaning. |
 | `questions`   | array   | yes      | 1 or more question objects. |
 
 Question object:
@@ -76,9 +77,9 @@ Question object:
 |-----------|-----------------|----------|---------|
 | `q`       | string          | yes      | The question. Markdown + inline/display LaTeX (`$...$`, `$$...$$`). |
 | `choices` | array of string | yes      | 2–10 options, same formatting freedom. |
-| `answer`  | number or array | yes      | 0-based index of the correct choice. An **array** of indices makes it a multi-select question (order irrelevant; the reader must match the set exactly). |
+| `answer`  | number or array | yes      | 0-based index of the correct choice **as authored** (the reader sees the choices shuffled, so the index is never a giveaway). An **array** of indices makes it a multi-select question (order irrelevant; the reader must match the set exactly). |
 | `hint`    | string or array | no       | One hint, or an array of progressively stronger hints revealed one at a time. |
-| `explain` | string          | no       | Shown next to the question in post-submit review. |
+| `explain` | string          | no       | Shown under the question the moment it is graded. |
 
 Unknown fields are ignored (forward compatibility). An invalid quiz (bad JSON,
 missing required fields, out-of-range `answer`) is skipped by renderers and
@@ -98,8 +99,13 @@ content in the language of the document.
   description, question count, and the reader's best score / attempts.
 - The quiz renders in a resizable side pane (or fullscreen, per `layout`) with
   a numbered question palette, colored by answered state; hints reveal on
-  demand; submit produces a score plus a review of missed questions with
-  explanations; attempts can be retried.
+  demand.
+- **Grading is immediate.** Picking a choice on a single-answer question grades
+  it on the spot: right/wrong is shown, the correct choice is highlighted, the
+  `explain` text appears, and the question locks. Multi-select questions grade
+  on an explicit "Check" (a click there only toggles a choice). There is no
+  submit step — once the last question is answered the score card appears, with
+  a review of missed questions; attempts can be retried.
 - Browser Back closes the quiz (or steps back through visited questions
   first); Forward reopens it.
 - Scores are stored locally per file and quiz `id` — stable `id`s keep

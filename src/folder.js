@@ -89,6 +89,73 @@ function formatSize(bytes) {
   return `${v >= 10 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
 }
 
+// --- quiz badges ---------------------------------------------------------
+// A markdown file carrying at least one `<!-- SKIM-QUIZ … -->` block gets a 🎓
+// next to its name. Only the marker is looked for, not a full parse: this runs
+// over a whole folder, and a file that merely *looks* like it has a quiz is a
+// far smaller sin here than reading and parsing every file twice.
+const QUIZ_MARKER_RE = /<!--\s*SKIM-QUIZ\b/;
+
+// Reading files needs "Allow access to file URLs"; without it every fetch
+// simply fails and no badges appear.
+const QUIZ_CACHE_KEY = 'skimFolderQuizIndex';
+const QUIZ_CACHE_LIMIT = 2000;      // entries; oldest folder visits fall off
+const QUIZ_MAX_BYTES = 4 * 1024 * 1024;
+const QUIZ_CONCURRENCY = 6;
+
+async function readQuizCache() {
+  try {
+    const stored = await chrome.storage.local.get(QUIZ_CACHE_KEY);
+    const cache = stored[QUIZ_CACHE_KEY];
+    return cache && typeof cache === 'object' ? cache : {};
+  } catch { return {}; }
+}
+
+async function writeQuizCache(cache) {
+  const keys = Object.keys(cache);
+  if (keys.length > QUIZ_CACHE_LIMIT) {
+    for (const key of keys.slice(0, keys.length - QUIZ_CACHE_LIMIT)) delete cache[key];
+  }
+  try { await chrome.storage.local.set({ [QUIZ_CACHE_KEY]: cache }); } catch { /* quota/no API */ }
+}
+
+async function fileHasQuiz(href) {
+  const response = await fetch(href);
+  if (!response.ok) return false;
+  return QUIZ_MARKER_RE.test(await response.text());
+}
+
+// Mark every markdown entry that contains a quiz, cheapest source first: the
+// cache (keyed by href + modification time) before the file itself.
+async function detectQuizzes(entries, mark) {
+  const candidates = entries.filter((e) => e.isMd && (e.size === null || e.size <= QUIZ_MAX_BYTES));
+  if (!candidates.length) return;
+
+  const cache = await readQuizCache();
+  const pending = [];
+  for (const entry of candidates) {
+    const hit = cache[entry.href];
+    if (hit && hit.m === entry.dateVal) { if (hit.q) mark(entry); }
+    else pending.push(entry);
+  }
+  if (!pending.length) return;
+
+  let cursor = 0;
+  let changed = false;
+  const worker = async () => {
+    while (cursor < pending.length) {
+      const entry = pending[cursor++];
+      let has = false;
+      try { has = await fileHasQuiz(entry.href); } catch { continue; } // no file access
+      cache[entry.href] = { m: entry.dateVal, q: has ? 1 : 0 };
+      changed = true;
+      if (has) mark(entry);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(QUIZ_CONCURRENCY, pending.length) }, worker));
+  if (changed) await writeQuizCache(cache);
+}
+
 // natural sort ("ch2" before "ch10"), case-insensitive.
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -143,7 +210,14 @@ async function run() {
     if (entry) entries.push(entry);
   }
 
-  const state = { entries, key: 'name', dir: 1, filter: '' };
+  // Remembered column sort (newest first until the reader picks otherwise).
+  const savedSort = settings.folderSort && typeof settings.folderSort === 'object' ? settings.folderSort : {};
+  const state = {
+    entries,
+    key: ['name', 'size', 'date'].includes(savedSort.key) ? savedSort.key : DEFAULTS.folderSort.key,
+    dir: savedSort.dir === 1 || savedSort.dir === -1 ? savedSort.dir : DEFAULTS.folderSort.dir,
+    filter: '',
+  };
 
   // ---- header: eyebrow, breadcrumb path bar, stats ------------------------
   const crumbs = buildCrumbs();
@@ -196,8 +270,11 @@ async function run() {
     b.dataset.key = key;
     b.addEventListener('click', () => {
       if (state.key === key) state.dir = -state.dir;
-      else { state.key = key; state.dir = 1; }
+      // Dates open newest-first, names and sizes smallest-first: each is the
+      // useful end of its own column.
+      else { state.key = key; state.dir = key === 'date' ? -1 : 1; }
       applySort();
+      setSetting('folderSort', { key: state.key, dir: state.dir }).catch(() => {});
     });
     colBtns.set(key, b);
     head.append(b);
@@ -380,6 +457,15 @@ async function run() {
 
   applySort();
   applyFilter();
+
+  // Badges arrive asynchronously (one read per uncached markdown file) and are
+  // added in place, so the listing is usable immediately.
+  detectQuizzes(state.entries, (entry) => {
+    if (entry.row.querySelector('.skim-folder-quiz')) return;
+    const badge = el('span', { className: 'skim-folder-quiz', textContent: '🎓', title: 'Contains a quiz' });
+    badge.setAttribute('aria-label', 'contains a quiz');
+    entry.row.querySelector('.skim-folder-name')?.append(badge);
+  }).catch(() => {});
 
   const lastCrumb = crumbs[crumbs.length - 1];
   document.title = `${crumbs.length > 1 ? `${lastCrumb.label}/` : '/'} — Skim`;

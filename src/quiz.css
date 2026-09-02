@@ -235,6 +235,29 @@ html[data-skim-md="1"][data-theme="light"] {
 }
 .skim-quiz-choice-md { flex: 1 1 auto; min-width: 0; }
 
+/* --- verdict (immediate per-answer feedback) ---------------------------- */
+.skim-quiz-verdict {
+  margin-top: 0.9rem;
+  font-family: var(--mono);
+  font-size: 0.78em;
+  padding: 0.5em 0.8em;
+  border-radius: 8px;
+  border: 1px solid;
+  unicode-bidi: plaintext;
+}
+.skim-quiz-verdict.is-correct {
+  color: var(--skim-quiz-ok);
+  border-color: var(--skim-quiz-ok);
+  background: color-mix(in srgb, var(--skim-quiz-ok) 10%, transparent);
+}
+.skim-quiz-verdict.is-wrong {
+  color: var(--skim-quiz-bad);
+  border-color: var(--skim-quiz-bad);
+  background: color-mix(in srgb, var(--skim-quiz-bad) 10%, transparent);
+}
+/* Only the verdict just revealed animates; re-renders must not replay it. */
+.skim-quiz-verdict.is-fresh { animation: skim-quiz-reveal 0.18s ease-out; }
+
 /* --- hints & explanations ---------------------------------------------- */
 .skim-quiz-hints { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 0.45rem; align-items: flex-start; }
 .skim-quiz-hint {
@@ -284,6 +307,11 @@ html[data-skim-md="1"][data-theme="light"] {
   border-top: 1px solid var(--skim-border);
 }
 .skim-quiz-foot-nav { display: flex; gap: 0.4rem; }
+.skim-quiz-foot-hint {
+  font-family: var(--mono);
+  font-size: 0.72em;
+  color: var(--skim-muted);
+}
 .skim-quiz-ghost,
 .skim-quiz-primary {
   font-family: var(--mono);
@@ -426,6 +454,7 @@ html[data-skim-md="1"][data-theme="light"] {
 .skim-quiz-confirm p,
 .skim-quiz-score-frac,
 .skim-quiz-score-badge,
+.skim-quiz-foot-hint,
 .skim-quiz-ghost,
 .skim-quiz-primary,
 .skim-quiz-picker-meta { unicode-bidi: plaintext; }

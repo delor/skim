@@ -75,6 +75,10 @@ export function normalizeQuiz(jsonText, position) {
     layout: LAYOUTS.has(data.layout) ? data.layout : 'half',
     pass: typeof data.pass === 'number' && data.pass > 0 && data.pass <= 1 ? data.pass : null,
     shuffle: data.shuffle === true,
+    // Choice order is shuffled by default: hand-written quizzes overwhelmingly
+    // put the correct option first, which the reader learns faster than the
+    // material. Authors who need a fixed order opt out per quiz.
+    shuffleChoices: data.shuffleChoices !== false,
     questions,
   };
 }

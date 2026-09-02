@@ -1,11 +1,17 @@
 // Standards-based bidirectional text setup.
 //
 // HTML's `dir` attribute is the semantic switch for the Unicode Bidirectional
-// Algorithm. Its automatic base-direction rule uses the first strong character.
-// That needs one Markdown-specific accommodation: exercise/list labels such as
-// "(a)" are metadata, not prose, and must not make "(a) הסבר בעברית..." LTR.
-// Ignore such a leading label, choose the first strong prose character, then let
-// the browser's bidi implementation order all mixed inline runs.
+// Algorithm. Its automatic base-direction rule (`dir="auto"`) uses the first
+// strong character, which is wrong far too often for technical Hebrew/Arabic
+// writing: "softmax לוקחת וקטור logits שרירותי ומחזירה התפלגות" is a Hebrew
+// sentence that happens to open with an English term, and first-strong renders
+// the whole thing left-aligned and LTR. So instead of the first strong
+// character we take the first *sentence* and ask which language it is actually
+// written in, counting strong words (see `dominantDirection`). Two further
+// Markdown-specific accommodations: exercise/list labels such as "(a)" are
+// metadata and must not decide direction, and code/formulae are blanked out
+// before counting. The browser's bidi implementation still orders all mixed
+// inline runs inside the resulting paragraph.
 
 const LETTER = /\p{Letter}/u;
 const RTL_LETTER = /[\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}\p{Script=Hanifi_Rohingya}\p{Script=Yezidi}]/u;
@@ -93,15 +99,75 @@ function withoutLeadingLabel(text) {
   );
 }
 
-// Return null for punctuation/numbers-only content so it inherits the nearest
-// meaningful block direction. This mirrors the Unicode bidi first-strong rule
-// after the leading-label accommodation above.
-export function textDirection(text) {
-  for (const char of withoutLeadingLabel(text)) {
-    if (!LETTER.test(char)) continue;
-    return RTL_LETTER.test(char) ? 'rtl' : 'ltr';
+// Words, classified by their own first strong letter. Counting words rather
+// than characters keeps the comparison fair: Hebrew spells the same content in
+// far fewer letters than Latin script does.
+// Hyphenated and apostrophised compounds count once: "self-attention" and
+// "fine-tuning" are single terms, and splitting them would inflate the Latin
+// side of every technical sentence.
+const WORD = /\p{Letter}[\p{Letter}\p{Mark}]*(?:[-'’][\p{Letter}\p{Mark}]+)*/gu;
+
+// An RTL sentence carrying untranslated Latin jargon ("softmax", "logits",
+// "cross-entropy") is the common case in technical Hebrew/Arabic writing; a
+// mostly-English sentence quoting a Hebrew term or two is much rarer. So RTL
+// wins on a strong minority of the words, LTR needs a clear majority. The
+// threshold is deliberately below half, and asymmetric for that reason.
+const RTL_SHARE_THRESHOLD = 0.4;
+
+// Which language a run of prose is actually written in, or null when it holds
+// no strong characters at all (digits, punctuation) and should inherit.
+export function dominantDirection(text) {
+  let rtl = 0;
+  let ltr = 0;
+  for (const [word] of String(text).matchAll(WORD)) {
+    if (RTL_LETTER.test(word[0])) rtl += 1;
+    else ltr += 1;
   }
-  return null;
+  if (!rtl && !ltr) return null;
+  return rtl / (rtl + ltr) >= RTL_SHARE_THRESHOLD ? 'rtl' : 'ltr';
+}
+
+// Sentence spans, lazily — used to pick the opening sentence without segmenting
+// a whole article. Newlines end a span too: block text concatenated from
+// several elements has no sentence punctuation between the pieces.
+function* sentenceSpans(text) {
+  const re = /.*?(?:[.!?…]+(?=\s|$)\s*|\n+|$)/gs;
+  let match;
+  while ((match = re.exec(text)) && match[0]) {
+    yield { start: match.index, end: match.index + match[0].length, text: match[0] };
+  }
+}
+
+// How much text a decision needs. A paragraph very often opens with a bare term
+// as its own sentence ("BatchNorm.", "RAG.", "NLL / Cross-Entropy.") before the
+// prose starts; such an opener is a heading in disguise and must not decide the
+// paragraph, so keep reading sentences until enough words have accumulated.
+const MIN_DECIDING_WORDS = 4;
+
+function countWords(text) {
+  return [...String(text).matchAll(WORD)].length;
+}
+
+// Base direction of a block: the language of its opening prose. Once there is
+// enough of it the rest gets no vote, so a Hebrew paragraph followed by a long
+// English gloss stays RTL and the gloss gets its own bidi paragraph below.
+// Returns null for punctuation/numbers-only content so it inherits the nearest
+// meaningful block direction.
+export function textDirection(text) {
+  const stripped = withoutLeadingLabel(text);
+  const whole = dominantDirection(stripped);
+  if (whole === null) return null;
+
+  let opening = '';
+  for (const sentence of sentenceSpans(stripped)) {
+    opening += sentence.text;
+    if (countWords(opening) >= MIN_DECIDING_WORDS) break;
+  }
+  // Either signal is enough to earn RTL: an opening in Hebrew/Arabic (even when
+  // a long English gloss follows and outweighs it), or a block that is Hebrew
+  // overall (even when it opens on a file name, an acronym or a Latin term).
+  // Only when both read as LTR is the block really written in a LTR language.
+  return dominantDirection(opening) === 'rtl' || whole === 'rtl' ? 'rtl' : 'ltr';
 }
 
 // Strong bidi class of a single character, for neighbors-of-a-symbol checks.
@@ -144,6 +210,42 @@ const CLOSERS = [['(', ')'], ['[', ']']];
 
 function overlapsAny(ranges, start, end) {
   return ranges.some((r) => start < r.end && end > r.start);
+}
+
+// Balanced bracket groups, outermost first, as [start, end) spans covering the
+// brackets themselves.
+function bracketGroups(text) {
+  const groups = [];
+  for (const [open, close] of CLOSERS) {
+    const stack = [];
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === open) stack.push(i);
+      else if (text[i] === close && stack.length) {
+        const start = stack.pop();
+        if (!stack.length) groups.push({ start, end: i + 1 });
+      }
+    }
+  }
+  return groups;
+}
+
+// A parenthetical written in the other language — `knob (temperature,
+// smoothing, שיעור dropout)` inside Hebrew prose — is a unit, and the bidi
+// algorithm resolves its brackets and commas to the surrounding paragraph
+// direction, which strands the closing bracket in the middle of the phrase.
+// Give the whole group its own base direction instead. Judged by the same
+// word-count rule as a block, so a Hebrew aside inside Hebrew prose (or the odd
+// Latin term inside a Hebrew parenthetical) is left alone.
+function oppositeDirectionBrackets(text, baseDirection) {
+  const ranges = [];
+  for (const { start, end } of bracketGroups(text)) {
+    const inner = text.slice(start + 1, end - 1);
+    if (!inner || inner.length > 200 || inner.includes('\n')) continue;
+    if (!LETTER.test(inner)) continue;
+    const direction = dominantDirection(inner);
+    if (direction && direction !== baseDirection) ranges.push({ start, end, direction });
+  }
+  return ranges;
 }
 
 // All [start, end) spans of `text` that should render as isolated LTR phrases.
@@ -192,7 +294,18 @@ export function ltrIslandRanges(text) {
   return ranges.sort((a, b) => a.start - b.start);
 }
 
-// Wrap every LTR-phrase range found in RTL-context text nodes in <bdi>.
+// Every span of a text node that needs its own base direction: the phrase-level
+// LTR islands above (RTL context only) plus opposite-direction parentheticals
+// (either context).
+function isolationRanges(text, baseDirection) {
+  const brackets = oppositeDirectionBrackets(text, baseDirection);
+  const phrases = baseDirection === 'rtl'
+    ? ltrIslandRanges(text).filter((r) => !overlapsAny(brackets, r.start, r.end))
+    : [];
+  return [...brackets, ...phrases].sort((a, b) => a.start - b.start);
+}
+
+// Wrap every such range in a <bdi> carrying its own direction.
 function isolateLtrPhrases(article) {
   const doc = article.ownerDocument;
   const walker = doc.createTreeWalker(article, 4); // NodeFilter.SHOW_TEXT
@@ -204,8 +317,9 @@ function isolateLtrPhrases(article) {
     const parent = textNode.parentElement;
     if (!parent) continue;
     if (parent.closest(FIXED_LTR_SELECTOR)) continue;
-    if (effectiveDir(parent) !== 'rtl') continue;
-    const ranges = ltrIslandRanges(textNode.data);
+    const baseDirection = effectiveDir(parent);
+    if (baseDirection !== 'rtl' && baseDirection !== 'ltr') continue;
+    const ranges = isolationRanges(textNode.data, baseDirection);
     if (!ranges.length) continue;
 
     const frag = doc.createDocumentFragment();
@@ -214,7 +328,7 @@ function isolateLtrPhrases(article) {
       if (range.start > last) frag.append(doc.createTextNode(textNode.data.slice(last, range.start)));
       const isolate = doc.createElement('bdi');
       isolate.className = 'skim-ltr-phrase';
-      isolate.setAttribute('dir', 'ltr');
+      isolate.setAttribute('dir', range.direction || 'ltr');
       isolate.textContent = textNode.data.slice(range.start, range.end);
       frag.append(isolate);
       last = range.end;
@@ -236,17 +350,11 @@ function sentenceParts(text) {
 
   // Old-browser fallback: retain trailing whitespace with each sentence so
   // extracting a segment from the DOM does not concatenate neighboring words.
-  const parts = [];
-  const re = /.*?(?:[.!?…]+(?=\s|$)\s*|$)/gs;
-  let match;
-  while ((match = re.exec(text)) && match[0]) {
-    parts.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      direction: textDirection(match[0]),
-    });
-  }
-  return parts;
+  return [...sentenceSpans(text)].map(({ start, end, text: segment }) => ({
+    start,
+    end,
+    direction: textDirection(segment),
+  }));
 }
 
 function pointAtTextOffset(root, wanted) {
@@ -319,6 +427,14 @@ export function applyBidi(article) {
   const articleDirection = textDirection(proseText(article));
   if (articleDirection) article.setAttribute('dir', articleDirection);
   else article.removeAttribute('dir');
+
+  // Tables keep a LTR column order regardless of the prose around them: a
+  // Markdown table's first column is written first in the source, and readers
+  // expect column 1 on the left and a 1..5 row to read left-to-right even in a
+  // Hebrew document. Cell *contents* still pick their own direction below.
+  article.querySelectorAll('table').forEach((node) => {
+    if (!node.hasAttribute('dir')) node.setAttribute('dir', 'ltr');
+  });
 
   article.querySelectorAll(BLOCK_SELECTOR).forEach((node) => {
     // Respect explicit direction supplied by trusted/sanitized Markdown HTML.

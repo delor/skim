@@ -301,12 +301,15 @@ html[data-skim-md="1"] body.skim-body {
     linear-gradient(to left, var(--skim-bg) 30%, rgba(21,21,26,0)) right / 24px 100% no-repeat;
 }
 
+/* A table narrower than the text column is centered in it, never flushed to
+   one edge — and its columns always run left-to-right (bidi.js sets dir="ltr"
+   on the table itself; individual cells still take their own direction). */
 .skim table {
   border-collapse: collapse;
   table-layout: auto;
   width: auto;
   max-width: 100%;
-  margin: 0;
+  margin: 0 auto;
   font-size: 0.95em;
 }
 .skim .skim-table-wrap.is-wide table { width: 100%; max-width: none; }
@@ -529,7 +532,20 @@ html.skim-lightbox-open { overflow: hidden; }
    across lines. */
 .skim .skim-math-inline { white-space: nowrap; }
 .skim .skim-math-inline .katex { font-size: 1.32em; }
-.skim .skim-math-display .katex { font-size: 1.55em; }
+.skim .skim-math-display .katex { font-size: calc(1.55em * var(--skim-math-scale, 1)); }
+
+/* Overflowing display math, reflowed by math-fit.js (see its header): the
+   formula may wrap, but only between the nowrap groups that module builds, so
+   breaks land on relations, top-level commas or binary operators and nowhere
+   else. */
+.skim .skim-math-display.skim-math-wrapped { overflow-x: hidden; }
+.skim .skim-math-display.skim-math-wrapped > .katex-display > .katex {
+  white-space: normal;
+  line-height: 1.9;
+}
+.skim .skim-math-group { white-space: nowrap; }
+/* A shrunk formula no longer needs its scrollbar. */
+.skim .skim-math-display.skim-math-scaled:not(.skim-math-wrapped) { overflow-x: auto; }
 
 /* Copy buttons (code + latex) ---------------------------------------- */
 .skim-copy-btn {
@@ -599,6 +615,20 @@ html.skim-lightbox-open { overflow: hidden; }
   justify-content: center;
 }
 .skim-toolbar-handle:hover { filter: brightness(1.1); }
+/* "This document has a quiz": a graduation cap perched on the handle's top-left
+   corner, tilted the way one sits on a head. Pointer-events off so it can never
+   swallow a click meant for the tab underneath. */
+.skim-toolbar-handle { position: relative; }
+.skim-quiz-mark {
+  position: absolute;
+  top: -0.55em;
+  left: -0.55em;
+  font-size: 0.8rem;
+  line-height: 1;
+  pointer-events: none;
+  transform: rotate(-20deg);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
 .skim-toolbar-panel {
   display: flex;
   flex-direction: column;        /* opens as a vertical stack */
@@ -1435,3 +1465,74 @@ html[data-skim-md="1"][data-theme="light"] .skim .hljs-params { color: #24292e; 
   .skim tr { break-inside: avoid; }
   .skim h1, .skim h2, .skim h3, .skim h4, .skim h5, .skim h6 { break-after: avoid; }
 }
+
+/* Review nudge ----------------------------------------------------------- */
+/* A corner card, sized like a toast, in the toolbar's own lavender-on-dark
+   language. Slides in from below; never covers the column on a wide screen. */
+.skim-review {
+  position: fixed;
+  right: 1.2rem;
+  bottom: 1.2rem;
+  z-index: 60;
+  box-sizing: border-box;
+  width: min(21rem, calc(100vw - 2.4rem));
+  padding: 0.85rem 2.1rem 0.85rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.8em;
+  line-height: 1.45;
+  color: var(--skim-fg);
+  background: var(--skim-code-bg);
+  border: 1px solid var(--skim-border);
+  border-inline-start: 3px solid var(--skim-h1-bg);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(0.8rem);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+}
+.skim-review.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.skim-review-text { margin: 0 0 0.7em; }
+.skim-review-text strong { color: var(--skim-heading); font-weight: 700; }
+.skim-review-actions { display: flex; align-items: center; gap: 0.9em; }
+.skim-review-rate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.4em 0.9em;
+  border-radius: 6px;
+  color: var(--skim-h1-fg) !important;
+  background: var(--skim-h1-bg);
+  text-decoration: none !important;
+  font-weight: 700;
+}
+.skim-review-rate:hover { filter: brightness(1.1); }
+.skim-review-star { color: #ffd76b; }
+.skim-review-later {
+  padding: 0.4em 0.2em;
+  border: none;
+  background: none;
+  color: var(--skim-muted);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.skim-review-later:hover { color: var(--skim-fg); }
+.skim-review-close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.45rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  background: none;
+  color: var(--skim-muted);
+  font: inherit;
+  font-size: 1.15em;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.skim-review-close:hover { color: var(--skim-fg); background: rgba(127, 127, 127, 0.15); }
+@media print { .skim-review { display: none; } }
+@media (prefers-reduced-motion: reduce) { .skim-review { transition: opacity 0.2s ease; transform: none; } }

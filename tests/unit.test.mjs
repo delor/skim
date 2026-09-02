@@ -22,6 +22,78 @@ test('bidi keeps a genuinely English explanation LTR', () => {
   );
 });
 
+test('bidi reads a Hebrew sentence that opens with an English term as RTL', () => {
+  assert.equal(
+    textDirection('softmax לוקחת וקטור logits שרירותי ומחזירה התפלגות: כל הערכים חיוביים וסכומם 1.'),
+    'rtl'
+  );
+  assert.equal(textDirection('gradient descent מעדכן את המשקולות בכיוון ההפוך לגרדיאנט.'), 'rtl');
+});
+
+test('bidi does not flip English prose that quotes a Hebrew term or two', () => {
+  assert.equal(textDirection('The loss is called אנטרופיה צולבת in the lecture notes.'), 'ltr');
+  assert.equal(textDirection('An English paragraph with מילה אחת.'), 'ltr');
+});
+
+test('bidi decides on the opening sentence, not the whole block', () => {
+  assert.equal(
+    textDirection([
+      'הרשת מחשבת את הגרדיאנט בשכבה האחרונה.',
+      'Gloss: the last layer computes the gradient of the loss with respect to the logits,',
+      'and the chain rule propagates it backwards through every hidden layer in turn.',
+    ].join(' ')),
+    'rtl'
+  );
+});
+
+test('bidi is not decided by a bare term used as the opening sentence', () => {
+  assert.equal(textDirection('BatchNorm. בזמן אימון, לכל feature מחשבים ממוצע ושונות על ה-mini-batch.'), 'rtl');
+  assert.equal(textDirection('LoRA (Low-Rank Adaptation). מקפיאים את המשקולות ומוסיפים שתי מטריצות דקות.'), 'rtl');
+});
+
+test('bidi counts a hyphenated term once, not once per fragment', () => {
+  assert.equal(
+    textDirection('decoder masked self-attention: Q, K, V כולם מגיעים מהקלט של הדקודר.'),
+    'rtl'
+  );
+});
+
+test('applyBidi gives a Latin-opening Hebrew paragraph an RTL base direction', () => {
+  const article = document.createElement('article');
+  article.innerHTML = renderMarkdown(
+    '*softmax לוקחת וקטור logits שרירותי ומחזירה התפלגות: כל הערכים חיוביים וסכומם 1.*'
+  );
+
+  applyBidi(article);
+
+  assert.equal(article.querySelector('p').getAttribute('dir'), 'rtl');
+  assert.equal(article.querySelector('p').querySelector('bdi.skim-bidi-segment'), null);
+});
+
+test('applyBidi keeps table columns LTR inside Hebrew prose but not the cells', () => {
+  const article = document.createElement('article');
+  article.innerHTML = [
+    '<p>טבלה מסכמת של התוצאות בעברית בלבד.</p>',
+    '<table><thead><tr><th>שם</th><th>ערך</th></tr></thead>',
+    '<tbody><tr><td>דיוק</td><td>1</td></tr></tbody></table>',
+  ].join('');
+
+  applyBidi(article);
+
+  const table = article.querySelector('table');
+  assert.equal(table.getAttribute('dir'), 'ltr', 'column order stays left-to-right');
+  assert.equal(article.querySelector('th').getAttribute('dir'), 'rtl', 'Hebrew cell text is RTL');
+});
+
+test('applyBidi respects an authored dir on a table', () => {
+  const article = document.createElement('article');
+  article.innerHTML = '<table dir="rtl"><tbody><tr><td>א</td><td>ב</td></tr></tbody></table>';
+
+  applyBidi(article);
+
+  assert.equal(article.querySelector('table').getAttribute('dir'), 'rtl');
+});
+
 test('applyBidi isolates code and does not let it determine prose direction', () => {
   const article = document.createElement('article');
   article.innerHTML = '<p>(a) <code>sites_df = broadcast(sites_df)</code> הסבר ארוך בעברית בלבד</p>';
@@ -1799,6 +1871,7 @@ const QUIZ_DOC = [
     description: 'סגורה, חסומה, ויירשטראס',
     layout: 'third',
     pass: 0.7,
+    shuffleChoices: false,   // keep authored order so the flow tests can click by index
     questions: [
       { q: 'מתי $\\{g\\le c\\}$ **סגורה**?', choices: ['רציפות ואי-שוויון לא חד', 'חסימות'], answer: 0, hint: 'תמונה הפוכה', explain: 'קרן סגורה נמשכת לאחור.' },
       { q: 'Which are norms on $\\mathbb{R}^2$?', choices: ['$\\|x\\|_1$', '$x_1^2$', '$\\|x\\|_\\infty$'], answer: [0, 2], hint: ['Think homogeneity.', 'Squares are not homogeneous.'] },
@@ -1809,7 +1882,7 @@ const QUIZ_DOC = [
   'עוד תוכן.',
   '',
   '<!-- SKIM-QUIZ',
-  JSON.stringify({ skimQuiz: 1, title: 'Second quiz', questions: [{ q: 'One?', choices: ['a', 'b'], answer: 1 }] }),
+  JSON.stringify({ skimQuiz: 1, title: 'Second quiz', shuffleChoices: false, questions: [{ q: 'One?', choices: ['a', 'b'], answer: 1 }] }),
   '-->',
 ].join('\n');
 
@@ -1895,7 +1968,7 @@ function mountQuizFixture(quizList, articleDir) {
   return { container, button };
 }
 
-test('quiz UI: open, answer, hint, submit, review', () => {
+test('quiz UI: open, answer, instant verdict, score, review', () => {
   const realMatch = window.matchMedia;
   window.matchMedia = () => ({ matches: true });   // skip score count-up animation
   try {
@@ -1909,20 +1982,28 @@ test('quiz UI: open, answer, hint, submit, review', () => {
     assert.equal(container.querySelectorAll('.skim-quiz-chip').length, 2);
     assert.ok(container.querySelector('.skim-quiz .skim-math'), 'LaTeX rendered inside the question');
 
-    container.querySelectorAll('.skim-quiz-choice')[0].click();
-    assert.ok(container.querySelector('.skim-quiz-chip.is-answered'), 'palette marks the answer');
-
     const hintBtn = [...container.querySelectorAll('button')].find((b) => b.textContent.includes('Hint'));
     hintBtn.click();
     assert.ok(container.querySelector('.skim-quiz-hint'), 'hint revealed');
 
+    container.querySelectorAll('.skim-quiz-choice')[0].click();    // single-select grades on click
+    assert.ok(container.querySelector('.skim-quiz-verdict.is-correct'), 'verdict shown immediately');
+    assert.ok(container.querySelector('.skim-quiz-chip.is-correct'), 'palette marks the graded answer');
+    assert.ok(container.querySelector('.skim-quiz-explain'), 'explanation revealed with the verdict');
+    assert.equal(container.querySelector('.skim-quiz-hints'), null, 'hints retire once graded');
+    assert.ok([...container.querySelectorAll('.skim-quiz-choice')].every((c) => c.disabled), 'graded question locks');
+
     container.querySelectorAll('.skim-quiz-chip')[1].click();      // go to Q2 (multi)
     const c2 = container.querySelectorAll('.skim-quiz-choice');
     c2[0].click();
+    assert.equal(container.querySelector('.skim-quiz-verdict'), null, 'multi-select waits for Check');
     container.querySelectorAll('.skim-quiz-choice')[2].click();    // re-query: renderAll rebuilt
 
-    [...container.querySelectorAll('button')].find((b) => b.textContent === 'Submit').click();
-    assert.ok(container.querySelector('.skim-quiz-scorecard'), 'score view shown');
+    [...container.querySelectorAll('button')].find((b) => b.textContent === 'Check').click();
+    assert.ok(container.querySelector('.skim-quiz-verdict.is-correct'), 'multi-select verdict shown');
+
+    [...container.querySelectorAll('button')].find((b) => b.textContent === 'Score').click();
+    assert.ok(container.querySelector('.skim-quiz-scorecard'), 'score view shown after the last answer');
     assert.match(container.querySelector('.skim-quiz-score-big').textContent, /100%/);
     assert.equal(container.querySelectorAll('.skim-quiz-chip.is-correct').length, 2);
 
@@ -1937,6 +2018,105 @@ test('quiz UI: open, answer, hint, submit, review', () => {
   }
 });
 
+test('quiz UI: a wrong answer is called out and shows the right one', () => {
+  const realMatch = window.matchMedia;
+  window.matchMedia = () => ({ matches: true });
+  try {
+    const quiz = parseQuizzes(QUIZ_DOC)[1];   // one question, answer index 1
+    const { container, button } = mountQuizFixture([quiz], 'ltr');
+    button.click();
+
+    container.querySelectorAll('.skim-quiz-choice')[0].click();
+    assert.ok(container.querySelector('.skim-quiz-verdict.is-wrong'), 'wrong answer called out');
+    assert.ok(container.querySelectorAll('.skim-quiz-choice')[0].classList.contains('is-missed'));
+    assert.ok(container.querySelectorAll('.skim-quiz-choice')[1].classList.contains('is-right'));
+    assert.ok(container.querySelector('.skim-quiz-chip.is-wrong'), 'palette marks it wrong');
+
+    [...container.querySelectorAll('button')].find((b) => b.textContent === 'Score').click();
+    assert.match(container.querySelector('.skim-quiz-score-big').textContent, /0%/);
+
+    container.querySelector('.skim-quiz-pane').remove();
+    container.remove();
+  } finally {
+    window.matchMedia = realMatch;
+  }
+});
+
+// Reloading a page with an open quiz re-enters through history.state. jsdom
+// leaves `history` off the global (src reads it bare), so expose it here — the
+// restore path is exactly where an empty pane regressed.
+test('quiz UI: a page reload restores the open quiz instead of an empty pane', () => {
+  const hadHistory = 'history' in globalThis;
+  globalThis.history = window.history;
+  try {
+    const quiz = parseQuizzes(QUIZ_DOC)[1];
+    const first = mountQuizFixture([quiz], 'ltr');
+    first.button.click();
+    assert.deepEqual(window.history.state?.skimQuiz?.id, quiz.id, 'open pushes a restorable state');
+    first.container.querySelector('.skim-quiz-pane').remove();
+    first.container.remove();
+
+    const reloaded = mountQuizFixture([quiz], 'ltr');   // fresh control, same history entry
+    const quizEl = reloaded.container.querySelector('.skim-quiz');
+    assert.ok(quizEl, 'pane remounted on reload');
+    assert.ok(quizEl.querySelector('.skim-quiz-choice'), 'the question renders, not an empty panel');
+    reloaded.container.querySelector('.skim-quiz-pane').remove();
+    reloaded.container.remove();
+  } finally {
+    window.history.replaceState(null, '');
+    if (!hadHistory) delete globalThis.history;
+  }
+});
+
+test('quiz UI: choices are shuffled, scored by their authored index', () => {
+  const realRandom = Math.random;
+  let n = 0;
+  Math.random = () => ((n = (n * 7 + 3) % 11) / 11);   // deterministic, non-identity
+  try {
+    const doc = '<!-- SKIM-QUIZ ' + JSON.stringify({
+      skimQuiz: 1, id: 'shuf', title: 'S',
+      questions: [{ q: 'pick c', choices: ['a', 'b', 'c', 'd', 'e'], answer: 2 }],
+    }) + ' -->';
+    const quiz = parseQuizzes(doc)[0];
+    assert.equal(quiz.shuffleChoices, true, 'shuffling is the default');
+    const { container, button } = mountQuizFixture([quiz], 'ltr');
+    button.click();
+
+    const texts = () => [...container.querySelectorAll('.skim-quiz-choice-md')].map((c) => c.textContent.trim());
+    assert.notDeepEqual(texts(), ['a', 'b', 'c', 'd', 'e'], 'display order differs from the authored order');
+    assert.deepEqual([...texts()].sort(), ['a', 'b', 'c', 'd', 'e'], 'every choice is still shown once');
+
+    // The authored answer travels with its text, not with position 3.
+    const cards = [...container.querySelectorAll('.skim-quiz-choice')];
+    cards[texts().indexOf('c')].click();
+    assert.ok(container.querySelector('.skim-quiz-verdict.is-correct'), 'the right text grades correct wherever it landed');
+
+    container.querySelector('.skim-quiz-pane').remove();
+    container.remove();
+  } finally {
+    Math.random = realRandom;
+  }
+});
+
+test('quiz UI: "all of the above" stays in its authored slot', () => {
+  const realRandom = Math.random;
+  Math.random = () => 0.42;
+  try {
+    const doc = '<!-- SKIM-QUIZ ' + JSON.stringify({
+      skimQuiz: 1, id: 'pin', title: 'P',
+      questions: [{ q: 'x', choices: ['a', 'b', 'c', 'All of the above'], answer: 3 }],
+    }) + ' -->';
+    const { container, button } = mountQuizFixture([parseQuizzes(doc)[0]], 'ltr');
+    button.click();
+    const texts = [...container.querySelectorAll('.skim-quiz-choice-md')].map((c) => c.textContent.trim());
+    assert.equal(texts[3], 'All of the above');
+    container.querySelector('.skim-quiz-pane').remove();
+    container.remove();
+  } finally {
+    Math.random = realRandom;
+  }
+});
+
 test('quiz UI: LTR article docks the pane on the right', () => {
   const quizzes = parseQuizzes(QUIZ_DOC);
   const { container, button } = mountQuizFixture([quizzes[1]], 'ltr');
@@ -1945,4 +2125,93 @@ test('quiz UI: LTR article docks the pane on the right', () => {
   assert.equal(pane.dataset.side, 'right');
   pane.remove();
   container.remove();
+});
+
+test('applyBidi isolates a mixed-language parenthetical as one unit', () => {
+  const article = document.createElement('article');
+  article.innerHTML = '<p>כשמופיע knob (temperature, smoothing, שיעור dropout), הניתוח הוא תמיד לגזור.</p>';
+
+  applyBidi(article);
+
+  const paragraph = article.querySelector('p');
+  assert.equal(paragraph.getAttribute('dir'), 'rtl');
+  const isolate = paragraph.querySelector('bdi.skim-ltr-phrase');
+  assert.ok(isolate, 'the parenthetical is isolated');
+  assert.equal(isolate.getAttribute('dir'), 'ltr');
+  assert.equal(isolate.textContent, '(temperature, smoothing, שיעור dropout)');
+});
+
+test('applyBidi leaves a Hebrew parenthetical in Hebrew prose alone', () => {
+  const article = document.createElement('article');
+  article.innerHTML = '<p>הסבר בעברית (כולל הערה בעברית עם term אחד) וסיום.</p>';
+
+  applyBidi(article);
+
+  assert.equal(article.querySelector('p bdi.skim-ltr-phrase'), null);
+});
+
+test('applyBidi isolates a Hebrew parenthetical inside English prose', () => {
+  const article = document.createElement('article');
+  article.innerHTML = '<p>The lecturer called this (הטיה של האומד) in the notes.</p>';
+
+  applyBidi(article);
+
+  const isolate = article.querySelector('p bdi.skim-ltr-phrase');
+  assert.ok(isolate);
+  assert.equal(isolate.getAttribute('dir'), 'rtl');
+  assert.equal(isolate.textContent, '(הטיה של האומד)');
+});
+
+// --- review nudge --------------------------------------------------------
+const nudge = await import('../src/review-nudge.js');
+const DAY = 24 * 3600 * 1000;
+
+test('review nudge: silent until a dozen renders spread over several days', () => {
+  const t0 = 1_000_000;
+  let s = { ...nudge.EMPTY_STATE };
+  for (let i = 0; i < 30; i++) s = nudge.recordRender(s, t0 + i);
+  assert.equal(s.renders, 30);
+  assert.equal(s.firstRender, t0);
+  // Plenty of renders, but all today: still too early.
+  assert.equal(nudge.shouldOffer(s, t0 + DAY), false);
+  assert.equal(nudge.shouldOffer(s, t0 + 6 * DAY), true);
+  // Old install, too few renders: also no.
+  let few = { ...nudge.EMPTY_STATE };
+  for (let i = 0; i < 5; i++) few = nudge.recordRender(few, t0);
+  assert.equal(nudge.shouldOffer(few, t0 + 30 * DAY), false);
+});
+
+test('review nudge: "later" snoozes by both time and renders; done is forever; 3 showings max', () => {
+  const t0 = 1_000_000;
+  let s = { ...nudge.EMPTY_STATE };
+  for (let i = 0; i < 12; i++) s = nudge.recordRender(s, t0);
+  const t1 = t0 + 10 * DAY;
+  assert.equal(nudge.shouldOffer(s, t1), true);
+  s = nudge.markSnoozed(nudge.markShown(s, t1), t1);
+  assert.equal(s.shown, 1);
+  // 45 days later but only a handful more renders: still snoozed.
+  for (let i = 0; i < 5; i++) s = nudge.recordRender(s, t1);
+  assert.equal(nudge.shouldOffer(s, t1 + 50 * DAY), false);
+  // Enough renders but not enough time: still snoozed.
+  for (let i = 0; i < 40; i++) s = nudge.recordRender(s, t1);
+  assert.equal(nudge.shouldOffer(s, t1 + 10 * DAY), false);
+  assert.equal(nudge.shouldOffer(s, t1 + 50 * DAY), true);
+  // Lifetime cap.
+  s = nudge.markShown(nudge.markShown(s, t1), t1);
+  assert.equal(nudge.shouldOffer(s, t1 + 50 * DAY), false);
+  // Done wins over everything.
+  assert.equal(nudge.shouldOffer(nudge.markDone({ ...nudge.EMPTY_STATE, renders: 99, firstRender: 1 }), t1 + 999 * DAY), false);
+});
+
+test('review nudge: card answers exactly once and links to the store reviews page', () => {
+  const answers = [];
+  const card = nudge.buildReviewCard(14, (k) => answers.push(k));
+  document.body.append(card);
+  assert.match(card.querySelector('.skim-review-rate').href, /chromewebstore\.google\.com\/.*\/reviews$/);
+  assert.match(card.textContent, /14 documents/);
+  card.querySelector('.skim-review-later').click();
+  card.querySelector('.skim-review-close').click();
+  card.skimAnswer('rate');
+  assert.deepEqual(answers, ['later']);
+  card.remove();
 });

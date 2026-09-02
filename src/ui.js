@@ -395,8 +395,11 @@ export function buildToolbar(buttons) {
   const panel = el('div', { className: 'skim-toolbar-panel' });
   for (const b of buttons) panel.append(b);
 
-  const handle = el('button', { className: 'skim-toolbar-handle', type: 'button', title: 'Options' });
-  const sync = () => { handle.textContent = toolbar.classList.contains('open') ? '›' : '‹'; };
+  // The chevron lives in its own span: the handle also hosts the quiz badge,
+  // and rewriting the button's textContent on every toggle would delete it.
+  const chevron = el('span', { className: 'skim-toolbar-chevron' });
+  const handle = el('button', { className: 'skim-toolbar-handle', type: 'button', title: 'Options' }, [chevron]);
+  const sync = () => { chevron.textContent = toolbar.classList.contains('open') ? '›' : '‹'; };
   const close = () => { toolbar.classList.remove('open'); sync(); };
 
   handle.addEventListener('click', () => { toolbar.classList.toggle('open'); sync(); });
@@ -410,6 +413,18 @@ export function buildToolbar(buttons) {
   // panel first so it slides out to the left of the edge-anchored handle.
   toolbar.append(panel, handle);
   sync();
+
+  // A tilted graduation cap pinned to the handle's top-left corner: the tab is
+  // the only always-visible chrome, so it is where "this document has a quiz"
+  // belongs. Toggled by the caller, since quizzes are re-parsed on reload.
+  toolbar.skimSetQuizMark = (on) => {
+    const existing = handle.querySelector('.skim-quiz-mark');
+    if (!on) { existing?.remove(); return; }
+    if (existing) return;
+    const mark = el('span', { className: 'skim-quiz-mark', textContent: '🎓', title: 'This document has a quiz' });
+    mark.setAttribute('aria-hidden', 'true');
+    handle.append(mark);
+  };
   return toolbar;
 }
 

@@ -96,6 +96,17 @@ async function init() {
       }
     });
 
+    // Claude Code's conventional local answer file. Awaited before close so
+    // the tab create cannot be torn down with the popup context.
+    $('claude-clip')?.addEventListener('click', async () => {
+      try {
+        await chrome.tabs.create({ url: 'file:///tmp/claude-1000/response.md' });
+        window.close();
+      } catch (err) {
+        console.error('Skim: opening Claude clipboard failed', err);
+      }
+    });
+
     // Hand the quiz protocol to other people's agents: the shipped
     // SKIM-QUIZ-PROTOCOL.md is the single source of truth, copied verbatim.
     $('copy-quiz-skill')?.addEventListener('click', async () => {

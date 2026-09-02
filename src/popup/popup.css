@@ -16,6 +16,8 @@
   --pop-code-fg: #f06b6b;
   --pop-code-bg: #2c2c34;
   --pop-star: #ffd76b;
+  --pop-claude: #c56a49;      /* Claude terracotta, distinct from the lavender hero */
+  --pop-claude-fg: #fdf3ec;
   --mono: "Skim Mono", "Skim Hebrew", ui-monospace, "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
 }
 :root[data-theme="light"] {
@@ -32,6 +34,8 @@
   --pop-code-fg: #b35a72;
   --pop-code-bg: #eae8e0;
   --pop-star: #dfa32e;
+  --pop-claude: #c05f3c;
+  --pop-claude-fg: #fdf3ec;
 }
 
 /* Chrome sizes the popup bubble to the body, then caps it at 600px tall; when
@@ -114,6 +118,12 @@ button.hero:disabled { opacity: 0.6; cursor: default; }
 .hero-icon { font-size: 20px; line-height: 1; }
 .hero-text { display: grid; gap: 2px; font-weight: 700; font-size: 13px; }
 .hero-text small { font-weight: 400; font-size: 10.5px; opacity: 0.78; }
+
+/* Smaller sibling of .hero: one line, no subtitle, its own accent. */
+button.hero-mini { padding: 8px 13px; border-radius: 9px; }
+button.hero-mini .hero-icon { font-size: 15px; }
+button.hero-mini .hero-text { font-size: 12px; }
+button.hero-claude { background: var(--pop-claude); color: var(--pop-claude-fg); }
 
 /* Once-in-a-lifetime action: a quiet text line, deliberately NOT a button
    shape so it can't compete with the clipboard hero in the visual hierarchy. */

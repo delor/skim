@@ -1,8 +1,10 @@
 // Skim Quiz UI. Renders protocol quizzes (see SKIM-QUIZ-PROTOCOL.md and
 // quiz.js) in a resizable side pane or fullscreen, with a question palette,
-// hints, submit/score/review, local attempt stats, and Back/Forward history
-// integration. All colors come from the theme tokens so every theme/scheme
-// combination works untouched.
+// hints, per-answer feedback, score/review, local attempt stats, and
+// Back/Forward history integration. Grading is immediate: answering a question
+// locks it and reveals right/wrong plus the explanation, so there is no submit
+// step — the score appears once the last question is answered. All colors come
+// from the theme tokens so every theme/scheme combination works untouched.
 import { renderMarkdown } from './render.js';
 import { applyBidi, textDirection } from './bidi.js';
 import { decorateGlyphs } from './glyphs.js';
@@ -61,6 +63,29 @@ async function recordAttempt(quizId, fraction) {
 }
 
 const pct = (fraction) => `${Math.round(fraction * 100)}%`;
+
+// "All of the above" and friends only make sense in their authored slot, so
+// they stay put while everything else is shuffled around them.
+const PINNED_CHOICE = /\b(all|none|both) of (the |these )?(above|below|these)\b|כל (התשובות|האפשרויות|הנ)|אף (אחת|אחד)/i;
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Display order for one question's choices: a permutation of the original
+// indices. Answers are always stored as original indices, so scoring and the
+// authored `answer` field are untouched by this.
+function choiceOrderFor(quiz, q) {
+  const identity = q.choices.map((_, i) => i);
+  if (!quiz.shuffleChoices) return identity;
+  const free = shuffleInPlace(identity.filter((i) => !PINNED_CHOICE.test(q.choices[i])));
+  let k = 0;
+  return identity.map((i) => (PINNED_CHOICE.test(q.choices[i]) ? i : free[k++]));
+}
 
 // --- session ------------------------------------------------------------
 // One buildQuizControl call owns at most one open quiz at a time.
@@ -132,16 +157,13 @@ export function buildQuizControl({ quizzes, container, article }) {
   function openQuiz(quiz, opts = {}) {
     if (session) teardown();
     const order = quiz.questions.map((_, i) => i);
-    if (quiz.shuffle) {
-      for (let i = order.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [order[i], order[j]] = [order[j], order[i]];
-      }
-    }
+    if (quiz.shuffle) shuffleInPlace(order);
     session = {
       quiz,
       order,
+      choiceOrder: quiz.questions.map((q) => choiceOrderFor(quiz, q)),
       answers: quiz.questions.map(() => null),
+      checked: quiz.questions.map(() => false),
       hintsShown: quiz.questions.map(() => 0),
       current: 0,
       submitted: false,
@@ -169,8 +191,8 @@ export function buildQuizControl({ quizzes, container, article }) {
 
   function teardown() {
     if (!session) return;
-    const { quiz, answers, hintsShown, submitted, result, order, current, reviewing } = session;
-    stash.set(quiz.id, { answers, hintsShown, submitted, result, order, current, reviewing });
+    const { quiz, answers, checked, hintsShown, submitted, result, order, choiceOrder, current, reviewing } = session;
+    stash.set(quiz.id, { answers, checked, hintsShown, submitted, result, order, choiceOrder, current, reviewing });
     session.dom.pane.remove();
     container.classList.remove('skim-quiz-open');
     document.removeEventListener('keydown', onQuizKey, true);
@@ -183,11 +205,12 @@ export function buildQuizControl({ quizzes, container, article }) {
   function requestClose(force = false) {
     if (!session) return;
     const dirty = !session.submitted && session.answers.some((a) => a != null);
+    const message = 'Close the quiz? You have not finished it.';
     const go = () => {
       closing = true;
       try { history.go(-1); } catch { closing = false; teardown(); }
     };
-    if (dirty && !force) confirmBox('Close the quiz? Your answers are not submitted.', 'Close', go);
+    if (dirty && !force) confirmBox(message, 'Close', go);
     else go();
   }
 
@@ -219,7 +242,12 @@ export function buildQuizControl({ quizzes, container, article }) {
       const quiz = list.find((q) => q.id === st.skimQuiz.id);
       if (quiz) openQuiz(quiz, { noHistory: true, restore: st.skimQuiz.q ?? 0 });
     }
-  } catch { /* ignore */ }
+  } catch (e) {
+    // A restore must never leave a half-mounted pane behind (it renders as an
+    // empty panel with the article squeezed beside it).
+    try { console.info('Skim quiz restore failed:', e); } catch { /* no console */ }
+    try { teardown(); } catch { /* nothing mounted */ }
+  }
 
   // ---- geometry --------------------------------------------------------
   // A side pane only exists when both it and the article keep a usable width;
@@ -373,10 +401,14 @@ export function buildQuizControl({ quizzes, container, article }) {
     }
     if (!session.dom.pane.contains(document.activeElement)) return;
     const s = session;
-    if (!s.submitted && /^[1-9]$/.test(e.key)) {
-      const idx = Number(e.key) - 1;
-      const q = s.quiz.questions[s.order[s.current]];
-      if (idx < q.choices.length) { toggleChoice(idx); e.preventDefault(); }
+    const qi = s.order[s.current];
+    if (!s.checked[qi] && /^[1-9]$/.test(e.key)) {
+      const pos = Number(e.key) - 1;
+      if (pos < s.choiceOrder[qi].length) { toggleChoice(s.choiceOrder[qi][pos]); e.preventDefault(); }
+    } else if (e.key === 'Enter' && !isScoreView() && !e.target.closest('button')) {
+      // Enter is the "continue" key: grade a multi-select, else move on.
+      if (!s.checked[qi]) { if (s.answers[qi] != null) { checkCurrent(); e.preventDefault(); } }
+      else { advance(); e.preventDefault(); }
     } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       const dir = session.dom.quizEl.getAttribute('dir') === 'rtl' ? -1 : 1;
       const delta = e.key === 'ArrowRight' ? dir : -dir;
@@ -397,49 +429,71 @@ export function buildQuizControl({ quizzes, container, article }) {
     renderAll();
   }
 
+  // Was this (already-graded) question answered correctly? Mirrors scoreQuiz's
+  // set comparison so the per-question badge and the final score never differ.
+  function isCorrect(qi) {
+    const want = session.quiz.questions[qi].answers;
+    const a = session.answers[qi];
+    const got = (Array.isArray(a) ? [...new Set(a)] : a != null ? [a] : []).sort((x, y) => x - y);
+    return got.length === want.length && got.every((v, j) => v === want[j]);
+  }
+
   function toggleChoice(idx) {
     const s = session;
-    if (s.submitted) return;
     const qi = s.order[s.current];
+    if (s.checked[qi]) return;   // graded questions are locked
     const q = s.quiz.questions[qi];
     if (q.multi) {
+      // Multi-select needs an explicit "Check" — a click can't mean "done".
       const cur = new Set(Array.isArray(s.answers[qi]) ? s.answers[qi] : []);
       cur.has(idx) ? cur.delete(idx) : cur.add(idx);
       s.answers[qi] = cur.size ? [...cur].sort((a, b) => a - b) : null;
+      renderAll();
+      focusQuiz();   // renderAll replaced the focused button; keep keys working
     } else {
-      s.answers[qi] = s.answers[qi] === idx ? null : idx;
+      s.answers[qi] = idx;
+      checkCurrent();
     }
-    renderAll();
-    focusQuiz();   // renderAll replaced the focused button; keep keys working
   }
 
-  function submit() {
+  // Grade the current question in place and reveal the verdict. The last
+  // question also closes the attempt (score recorded once, here).
+  function checkCurrent() {
     const s = session;
-    const unanswered = s.answers.filter((a) => a == null).length;
-    const finish = () => {
+    const qi = s.order[s.current];
+    if (s.checked[qi] || s.answers[qi] == null) return;
+    s.checked[qi] = true;
+    s.freshVerdict = qi;
+    if (s.checked.every(Boolean) && !s.submitted) {
       s.result = scoreQuiz(s.quiz, s.answers);
       s.submitted = true;
-      s.reviewing = false;
+      s.reviewing = true;   // linger on the last verdict; "See results" leaves
       recordAttempt(s.quiz.id, s.result.fraction);
-      renderAll();
-    };
-    if (unanswered) confirmBox(`${unanswered} unanswered question${unanswered === 1 ? '' : 's'} — submit anyway?`, 'Submit', finish);
-    else finish();
+    }
+    renderAll();
+    focusQuiz();
+  }
+
+  // Next thing to do after a verdict: the next unanswered question, else the
+  // score.
+  function advance() {
+    const s = session;
+    if (s.checked.every(Boolean)) { s.reviewing = false; renderAll(); return; }
+    const after = s.order.findIndex((qi, pos) => pos > s.current && !s.checked[qi]);
+    const target = after !== -1 ? after : s.order.findIndex((qi) => !s.checked[qi]);
+    gotoQuestion(target);
   }
 
   function retry() {
     const s = session;
     s.answers = s.quiz.questions.map(() => null);
+    s.checked = s.quiz.questions.map(() => false);
     s.hintsShown = s.quiz.questions.map(() => 0);
     s.submitted = false;
     s.result = null;
     s.reviewing = false;
-    if (s.quiz.shuffle) {
-      for (let i = s.order.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [s.order[i], s.order[j]] = [s.order[j], s.order[i]];
-      }
-    }
+    if (s.quiz.shuffle) shuffleInPlace(s.order);
+    s.choiceOrder = s.quiz.questions.map((q) => choiceOrderFor(s.quiz, q));
     s.current = 0;
     try { history.replaceState({ skimQuiz: { id: s.quiz.id, q: 0 } }, ''); } catch { /* ignore */ }
     renderAll();
@@ -480,7 +534,8 @@ export function buildQuizControl({ quizzes, container, article }) {
     const closeBtn = el('button', { type: 'button', className: 'skim-quiz-icon', title: 'Close quiz (Esc)', textContent: '✕' });
     closeBtn.addEventListener('click', () => requestClose());
 
-    const answered = s.answers.filter((a) => a != null).length;
+    const graded = s.checked.filter(Boolean).length;
+    const right = s.checked.reduce((n, done, qi) => n + (done && isCorrect(qi) ? 1 : 0), 0);
     return el('header', { className: 'skim-quiz-head' }, [
       el('div', { className: 'skim-quiz-titles' }, [
         el('h2', { className: 'skim-quiz-title', textContent: s.quiz.title }),
@@ -488,7 +543,9 @@ export function buildQuizControl({ quizzes, container, article }) {
           className: 'skim-quiz-progress',
           textContent: s.submitted && s.result
             ? `${s.result.correct}/${s.result.total} correct`
-            : `${answered}/${s.order.length} answered`,
+            : graded
+              ? `${graded}/${s.order.length} answered · ${right} correct`
+              : `0/${s.order.length} answered`,
         }),
       ]),
       el('div', { className: 'skim-quiz-actions' }, [modeBtn, closeBtn]),
@@ -501,11 +558,8 @@ export function buildQuizControl({ quizzes, container, article }) {
     s.order.forEach((qi, pos) => {
       const chip = el('button', { type: 'button', className: 'skim-quiz-chip', textContent: String(pos + 1) });
       if (pos === s.current && !isScoreView()) chip.classList.add('is-current');
-      if (s.submitted && s.result) {
-        chip.classList.add(s.result.per[qi].correct ? 'is-correct' : 'is-wrong');
-      } else if (s.answers[qi] != null) {
-        chip.classList.add('is-answered');
-      }
+      if (s.checked[qi]) chip.classList.add(isCorrect(qi) ? 'is-correct' : 'is-wrong');
+      else if (s.answers[qi] != null) chip.classList.add('is-answered');
       chip.setAttribute('aria-label', `Question ${pos + 1}`);
       chip.addEventListener('click', () => {
         s.reviewing = s.submitted;
@@ -517,12 +571,18 @@ export function buildQuizControl({ quizzes, container, article }) {
     return nav;
   }
 
-  const isScoreView = () => session.submitted && !session.reviewing;
+  // A declaration, not a `const` arrow: the session-restore path at the bottom
+  // of buildQuizControl renders before this point, and a const would still be
+  // in its temporal dead zone — that threw and left an empty pane on reload.
+  function isScoreView() {
+    return session.submitted && !session.reviewing;
+  }
 
   function buildQuestion() {
     const s = session;
     const qi = s.order[s.current];
     const q = s.quiz.questions[qi];
+    const checked = s.checked[qi];
     const body = el('div', { className: 'skim-quiz-body' });
     if (s.dom.quizEl.dataset.anim) {
       body.classList.add(`skim-anim-${s.dom.quizEl.dataset.anim}`);
@@ -537,13 +597,14 @@ export function buildQuizControl({ quizzes, container, article }) {
 
     const chosen = new Set(Array.isArray(s.answers[qi]) ? s.answers[qi] : s.answers[qi] != null ? [s.answers[qi]] : []);
     const choices = el('div', { className: 'skim-quiz-choices', role: 'group' });
-    q.choices.forEach((choice, idx) => {
+    // `pos` is what the reader sees and types; `idx` is the authored index.
+    s.choiceOrder[qi].forEach((idx, pos) => {
       const card = el('button', { type: 'button', className: 'skim-quiz-choice' }, [
-        el('span', { className: 'skim-quiz-choice-key', textContent: String(idx + 1) }),
-        mdBlock(choice, 'skim-quiz-choice-md'),
+        el('span', { className: 'skim-quiz-choice-key', textContent: String(pos + 1) }),
+        mdBlock(q.choices[idx], 'skim-quiz-choice-md'),
       ]);
       if (chosen.has(idx)) card.classList.add('is-selected');
-      if (s.submitted) {
+      if (checked) {
         card.disabled = true;
         if (q.answers.includes(idx)) card.classList.add('is-right');
         else if (chosen.has(idx)) card.classList.add('is-missed');
@@ -554,7 +615,21 @@ export function buildQuizControl({ quizzes, container, article }) {
     });
     body.append(choices);
 
-    if (!s.submitted && q.hints.length) {
+    if (checked) {
+      const right = isCorrect(qi);
+      const verdict = el('div', {
+        className: `skim-quiz-verdict ${right ? 'is-correct' : 'is-wrong'}`,
+        textContent: right
+          ? '✓ Correct'
+          : `✗ Not quite — the correct answer${q.answers.length > 1 ? 's are' : ' is'} highlighted`,
+      });
+      verdict.setAttribute('role', 'status');
+      if (s.freshVerdict === qi) verdict.classList.add('is-fresh');
+      s.freshVerdict = null;
+      body.append(verdict);
+    }
+
+    if (!checked && q.hints.length) {
       const shown = s.hintsShown[qi];
       const hintWrap = el('div', { className: 'skim-quiz-hints' });
       q.hints.slice(0, shown).forEach((h, hi) => {
@@ -580,7 +655,7 @@ export function buildQuizControl({ quizzes, container, article }) {
       body.append(hintWrap);
     }
 
-    if (s.submitted && q.explain) {
+    if (checked && q.explain) {
       const ex = el('div', { className: 'skim-quiz-explain' });
       ex.append(el('span', { className: 'skim-quiz-explain-tag', textContent: 'Why' }));
       ex.append(mdBlock(q.explain));
@@ -653,14 +728,31 @@ export function buildQuizControl({ quizzes, container, article }) {
     const next = el('button', { type: 'button', className: 'skim-quiz-ghost', textContent: 'Next ›', disabled: s.current === s.order.length - 1 });
     next.addEventListener('click', () => gotoQuestion(s.current + 1));
     foot.append(el('div', { className: 'skim-quiz-foot-nav' }, [prev, next]));
-    if (s.submitted) {
+
+    const qi = s.order[s.current];
+    const q = s.quiz.questions[qi];
+    if (!s.checked[qi]) {
+      if (q.multi) {
+        // Only multi-select has a grade button; a single choice grades on click.
+        const check = el('button', {
+          type: 'button',
+          className: 'skim-quiz-primary',
+          textContent: 'Check',
+          disabled: s.answers[qi] == null,
+        });
+        check.addEventListener('click', checkCurrent);
+        foot.append(check);
+      } else {
+        foot.append(el('span', { className: 'skim-quiz-foot-hint', textContent: 'Pick an answer' }));
+      }
+    } else if (s.submitted) {
       const back = el('button', { type: 'button', className: 'skim-quiz-primary', textContent: 'Score' });
       back.addEventListener('click', () => { s.reviewing = false; renderAll(); });
       foot.append(back);
     } else {
-      const sub = el('button', { type: 'button', className: 'skim-quiz-primary', textContent: 'Submit' });
-      sub.addEventListener('click', submit);
-      foot.append(sub);
+      const go = el('button', { type: 'button', className: 'skim-quiz-primary', textContent: 'Next question ›' });
+      go.addEventListener('click', advance);
+      foot.append(go);
     }
     return foot;
   }

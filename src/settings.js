@@ -10,6 +10,9 @@ export const DEFAULTS = {
   autoReload: true,   // re-render when the underlying file changes
   mermaid: true,      // render ```mermaid fences as diagrams
   zen: false,         // hide the table of contents and center the column
+  // Folder view column sort, remembered across folders and sessions. Newest
+  // first by default: a listing is usually opened to reach recent work.
+  folderSort: { key: 'date', dir: -1 }, // key: 'name' | 'size' | 'date'; dir: 1 asc | -1 desc
 };
 
 const hasSync = () => typeof chrome !== 'undefined' && chrome.storage?.sync;

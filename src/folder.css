@@ -249,6 +249,17 @@ a.skim-folder-crumb:hover { opacity: 1; text-decoration: underline; }
 }
 .skim-folder-slash { color: var(--skim-muted); flex: 0 0 auto; }
 
+/* "This file contains a quiz" — a graduation cap, tilted the way one sits on a
+   head, right after the file name. */
+.skim-folder-quiz {
+  flex: 0 0 auto;
+  margin-inline-start: 0.5em;
+  font-size: 0.85em;
+  line-height: 1;
+  display: inline-block;
+  transform: rotate(-12deg);
+}
+
 /* Icons: data-URI masks painted with currentColor so they follow each row
    type's color in every theme. */
 .skim-folder-icon {

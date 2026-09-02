@@ -16,9 +16,11 @@ import { extractFrontmatter, buildFrontmatterCard } from './frontmatter.js';
 import { renderMermaidBlocks } from './mermaid.js';
 import { setupLightbox } from './lightbox.js';
 import { applyBidi } from './bidi.js';
+import { fitDisplayMath, watchDisplayMath } from './math-fit.js';
 import { wrapOrphanInlines } from './normalize.js';
 import { parseQuizzes } from './quiz.js';
 import { buildQuizControl } from './quiz-ui.js';
+import { setupReviewNudge } from './review-nudge.js';
 import {
   collectHeadings,
   buildToc,
@@ -108,6 +110,7 @@ function populateArticle(article, source, settings) {
   // first render these properties don't exist yet, so this is a no-op.
   article.skimTableTeardown?.();
   article.skimAnchorsTeardown?.();
+  article.skimMathFitTeardown?.();
 
   article.innerHTML = renderMarkdown(source);
 
@@ -153,6 +156,11 @@ function populateArticle(article, source, settings) {
   // Needs the article mounted in the document (breakout needs layout) — both
   // callers only invoke populateArticle after the article is in the DOM.
   if (!huge) enhanceTables(article);
+
+  // Same requirement (needs layout): re-flow display formulae that do not fit
+  // the column, and keep them fitted as the column resizes.
+  fitDisplayMath(article);
+  article.skimMathFitTeardown = watchDisplayMath(article);
 
   // Mermaid diagrams: lazily import the bundled renderer only when the
   // article actually contains mermaid fences. Both callers (first render and
@@ -227,6 +235,7 @@ function render(detected, settings) {
   }
   main.append(rawPre);
   const toolbar = buildToolbar([themeToggle, paletteControl, paddingControl, zenControl, exportControl, exportHtmlButton, copySourceButton, viewToggle, folderButton, quizControl].filter(Boolean));
+  toolbar.skimSetQuizMark(quizzes.length > 0);
   document.body.append(toolbar);
 
   // populateArticle sized table breakouts before the TOC existed, i.e. against
@@ -255,6 +264,10 @@ function render(detected, settings) {
     const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
     if (target) target.scrollIntoView();
   }
+
+  // Count this render toward the (rare, earned) "rate Skim" card; it decides
+  // for itself whether this is one of the few page loads where it appears.
+  setupReviewNudge();
 
   // Live-sync theme/density changes made from another tab or the popup.
   // Resync the toolbar's own theme label and padding active-marks too, or
@@ -285,7 +298,9 @@ function render(detected, settings) {
         const { fields: freshFields, body: freshBody } = extractFrontmatter(text);
         document.querySelector('.skim-frontmatter')?.remove();
         populateArticle(article, freshBody, settings);
-        quizControl?.skimQuizUpdate(parseQuizzes(freshBody));
+        const freshQuizzes = parseQuizzes(freshBody);
+        quizControl?.skimQuizUpdate(freshQuizzes);
+        toolbar.skimSetQuizMark(freshQuizzes.length > 0);
         if (freshFields) article.before(buildFrontmatterCard(freshFields));
         nav.refresh();
         const freshHeadings = collectHeadings(article);
